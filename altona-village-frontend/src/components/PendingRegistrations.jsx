@@ -28,12 +28,25 @@ const PendingRegistrations = () => {
       }
     })
       .then(res => res.json())
-      .then(() => {
+      .then((data) => {
+        // Show email status to admin
+        if (data.email_sent) {
+          alert(`✅ User approved and email sent successfully!\nStatus: ${data.email_status}`);
+        } else {
+          alert(`⚠️ User approved but email failed to send.\nStatus: ${data.email_status}`);
+        }
         setPending(pending.filter(user => user.id !== userId));
+      })
+      .catch((error) => {
+        alert('Error approving user: ' + error.message);
       });
   };
 
   const handleReject = (userId) => {
+    if (!confirm('Are you sure you want to reject this registration? This will permanently delete the user.')) {
+      return;
+    }
+    
     fetch(`/api/admin/reject-registration/${userId}`, {
       method: 'POST',
       headers: {
@@ -41,8 +54,17 @@ const PendingRegistrations = () => {
       }
     })
       .then(res => res.json())
-      .then(() => {
+      .then((data) => {
+        // Show email status to admin
+        if (data.email_sent) {
+          alert(`✅ User rejected and notification email sent successfully!\nStatus: ${data.email_status}`);
+        } else {
+          alert(`⚠️ User rejected but email failed to send.\nStatus: ${data.email_status}`);
+        }
         setPending(pending.filter(user => user.id !== userId));
+      })
+      .catch((error) => {
+        alert('Error rejecting user: ' + error.message);
       });
   };
 

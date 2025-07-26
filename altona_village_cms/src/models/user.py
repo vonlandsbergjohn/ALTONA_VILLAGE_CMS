@@ -13,6 +13,13 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False, default='resident')
     status = db.Column(db.String(50), nullable=False, default='pending')
+    
+    # Email notification tracking
+    approval_email_sent = db.Column(db.Boolean, default=False)
+    approval_email_sent_at = db.Column(db.DateTime)
+    rejection_email_sent = db.Column(db.Boolean, default=False)
+    rejection_email_sent_at = db.Column(db.DateTime)
+    
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -34,6 +41,10 @@ class User(db.Model):
             'email': self.email,
             'role': self.role,
             'status': self.status,
+            'approval_email_sent': self.approval_email_sent,
+            'approval_email_sent_at': self.approval_email_sent_at.isoformat() if self.approval_email_sent_at else None,
+            'rejection_email_sent': self.rejection_email_sent,
+            'rejection_email_sent_at': self.rejection_email_sent_at.isoformat() if self.rejection_email_sent_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

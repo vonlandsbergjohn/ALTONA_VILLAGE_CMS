@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.models.user import User, Resident, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
-from src.utils.email_service import send_approval_email
+from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
 
 admin_bp = Blueprint('admin', __name__)
@@ -51,17 +51,23 @@ def approve_registration(user_id):
         # Update both status and role
         user.status = 'active'
         user.role = 'resident'  # Change from 'pending' to 'resident'
+        
+        # Send approval email notification and track status
+        email_success = False
+        email_message = "No email attempt made"
+        
+        if user.resident:
+            email_success, email_message = send_approval_email(user.email, user.resident.first_name)
+            user.approval_email_sent = email_success
+            user.approval_email_sent_at = datetime.utcnow() if email_success else None
+        
         db.session.commit()
         
-        # Send approval email notification
-        try:
-            if user.resident:
-                send_approval_email(user.email, user.resident.first_name)
-        except Exception as email_error:
-            print(f"Email sending failed: {email_error}")
-            # Don't fail the approval if email fails
-        
-        return jsonify({'message': 'Registration approved successfully'}), 200
+        return jsonify({
+            'message': 'Registration approved successfully',
+            'email_sent': email_success,
+            'email_status': email_message
+        }), 200
         
     except Exception as e:
         db.session.rollback()
@@ -79,11 +85,25 @@ def reject_registration(user_id):
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
+        # Send rejection email before deleting user
+        email_success = False
+        email_message = "No email attempt made"
+        
+        if user.resident:
+            email_success, email_message = send_rejection_email(user.email, user.resident.first_name)
+            user.rejection_email_sent = email_success
+            user.rejection_email_sent_at = datetime.utcnow() if email_success else None
+            db.session.commit()  # Save email status before deletion
+        
         # Delete user and associated resident data
         db.session.delete(user)
         db.session.commit()
         
-        return jsonify({'message': 'Registration rejected and deleted'}), 200
+        return jsonify({
+            'message': 'Registration rejected and deleted',
+            'email_sent': email_success,
+            'email_status': email_message
+        }), 200
         
     except Exception as e:
         db.session.rollback()
@@ -362,6 +382,40 @@ def get_resident_phones():
         phones = [resident.phone_number for resident in residents if resident.phone_number]
         
         return jsonify({'phones': phones}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/email-status', methods=['GET'])
+@jwt_required()
+def get_email_status():
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Get all users with email status
+        users = User.query.all()
+        result = []
+        
+        for user in users:
+            email_data = {
+                'id': user.id,
+                'email': user.email,
+                'status': user.status,
+                'role': user.role,
+                'approval_email_sent': user.approval_email_sent,
+                'approval_email_sent_at': user.approval_email_sent_at.isoformat() if user.approval_email_sent_at else None,
+                'rejection_email_sent': user.rejection_email_sent,
+                'rejection_email_sent_at': user.rejection_email_sent_at.isoformat() if user.rejection_email_sent_at else None,
+            }
+            
+            if user.resident:
+                email_data['name'] = f"{user.resident.first_name} {user.resident.last_name}"
+            
+            result.append(email_data)
+        
+        return jsonify(result), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
