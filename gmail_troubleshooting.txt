@@ -1,0 +1,19 @@
+# Alternative Gmail Configuration
+# If App Passwords don't work, try this approach
+
+# 1. Go to: https://myaccount.google.com/security
+# 2. Turn ON "2-Step Verification" 
+# 3. Generate a new App Password specifically for "Mail"
+# 4. Use the EXACT 16-character password (with spaces removed)
+
+# Example format of App Password (yours will be different):
+# Generated: abcd efgh ijkl mnop  
+# Use in .env: abcdefghijklmnop (no spaces)
+
+# If that still doesn't work, try:
+# 1. Enable "Less secure app access" (temporary)
+# 2. Use your regular Gmail password
+# 3. This is less secure but works for testing
+
+# Your current password length: 15 characters (should be 16)
+# This suggests the App Password is incomplete
