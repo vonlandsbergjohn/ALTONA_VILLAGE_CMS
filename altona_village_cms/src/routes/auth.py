@@ -75,3 +75,31 @@ def register():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+@auth_bp.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        if not data.get('email') or not data.get('password'):
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        user = User.query.filter_by(email=data['email']).first()
+        if not user or not user.check_password(data['password']):
+            return jsonify({'error': 'Invalid email or password'}), 401
+
+        if user.status != 'active':
+            return jsonify({'error': 'Account not activated. Please contact admin.'}), 401
+
+        # Create access token
+        access_token = create_access_token(
+            identity=user.id,
+            expires_delta=timedelta(days=7)
+        )
+
+        return jsonify({
+            'access_token': access_token,
+            'user': user.to_dict()
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
