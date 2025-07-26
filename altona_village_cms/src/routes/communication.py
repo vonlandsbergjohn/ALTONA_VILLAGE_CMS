@@ -45,15 +45,12 @@ def send_bulk_email():
         if not recipients:
             return jsonify({'error': 'No recipients found'}), 404
         
-        # For demo purposes, we'll simulate email sending
-        # In production, you would integrate with an email service like SendGrid, AWS SES, etc.
         sent_count = 0
         failed_emails = []
         
         for user in recipients:
             try:
-                # Simulate email sending
-                # send_email_via_service(user.email, subject, message)
+                send_email_via_service(user.email, subject, message)
                 sent_count += 1
             except Exception as e:
                 failed_emails.append(user.email)
@@ -100,8 +97,6 @@ def send_whatsapp_message():
         if not residents:
             return jsonify({'error': 'No phone numbers found'}), 404
         
-        # For demo purposes, we'll simulate WhatsApp API integration
-        # In production, you would integrate with WhatsApp Business API
         sent_count = 0
         failed_numbers = []
         
@@ -130,7 +125,6 @@ def get_message_templates():
     if admin_check:
         return admin_check
     
-    # Predefined message templates for common communications
     templates = [
         {
             'id': 'maintenance',
@@ -168,7 +162,6 @@ def get_communication_statistics():
         return admin_check
     
     try:
-        # Get communication statistics
         total_residents = User.query.filter_by(status='active', role='resident').count()
         residents_with_email = User.query.filter_by(status='active', role='resident').count()
         residents_with_phone = Resident.query.join(User).filter(
@@ -205,39 +198,28 @@ def get_communication_statistics():
         return jsonify({'error': str(e)}), 500
 
 def send_email_via_service(to_email, subject, message):
-    """
-    Placeholder function for email service integration
-    In production, integrate with services like:
-    - SendGrid
-    - AWS SES
-    - Mailgun
-    - SMTP server
-    """
-    # Example SMTP implementation (commented out for demo)
-    """
     smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
-    smtp_username = os.getenv('SMTP_USERNAME')
-    smtp_password = os.getenv('SMTP_PASSWORD')
-    
+    smtp_username = "vonlandsbergjohn@gmail.com"  # Hardcoded sender
+    smtp_password = os.getenv('SMTP_PASSWORD')    # Set this in your .env or environment
+
     if not smtp_username or not smtp_password:
         raise Exception('SMTP credentials not configured')
-    
+
     msg = MIMEMultipart()
     msg['From'] = smtp_username
     msg['To'] = to_email
     msg['Subject'] = subject
-    
+    msg['Reply-To'] = "altonavillagehoa@gmail.com, lynette@sir-worcester.co.za"
+
     msg.attach(MIMEText(message, 'plain'))
-    
+
     server = smtplib.SMTP(smtp_server, smtp_port)
     server.starttls()
     server.login(smtp_username, smtp_password)
     text = msg.as_string()
     server.sendmail(smtp_username, to_email, text)
     server.quit()
-    """
-    pass
 
 def send_whatsapp_via_api(phone_number, message):
     """
@@ -249,4 +231,3 @@ def send_whatsapp_via_api(phone_number, message):
     """
     # Example implementation would make HTTP requests to WhatsApp API
     pass
-
