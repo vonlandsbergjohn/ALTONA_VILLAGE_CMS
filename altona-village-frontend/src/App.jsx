@@ -4,6 +4,7 @@ import Layout from '@/components/Layout';
 import LoginForm from '@/components/LoginForm';
 import RegisterForm from '@/components/RegisterForm';
 import AdminDashboard from '@/components/AdminDashboard';
+import PendingRegistrations from './components/PendingRegistrations';
 import ResidentDashboard from '@/components/ResidentDashboard';
 import './App.css';
 
@@ -88,7 +89,7 @@ const Router = () => {
         case '/admin/complaints':
           return <div>Complaints Management (Coming Soon)</div>;
         case '/admin/pending':
-          return <div>Pending Registrations (Coming Soon)</div>;
+         return <PendingRegistrations />;
         case '/admin/communication':
           return <div>Communication Tools (Coming Soon)</div>;
         default:
