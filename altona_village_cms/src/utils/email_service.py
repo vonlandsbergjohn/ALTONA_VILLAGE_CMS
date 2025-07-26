@@ -2,6 +2,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -88,16 +89,22 @@ def send_rejection_email(to_email, first_name):
     Returns: (success: bool, error_message: str)
     """
     try:
-        # Email configuration
+        # Email configuration from environment variables
         smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         smtp_port = int(os.getenv('SMTP_PORT', '587'))
-        from_email = os.getenv('FROM_EMAIL', 'your-email@gmail.com')
-        from_password = os.getenv('EMAIL_PASSWORD', 'your-app-password')
+        from_email = os.getenv('FROM_EMAIL')
+        from_password = os.getenv('EMAIL_PASSWORD')
         
-        # For testing purposes, if no email config is set, simulate success
-        if from_email == 'your-email@gmail.com':
-            print(f"[EMAIL SIMULATION] Rejection email would be sent to {to_email} for {first_name}")
-            return True, "Email simulation successful"
+        # Validate email configuration
+        if not from_email or not from_password:
+            error_msg = "Email configuration missing. Please set FROM_EMAIL and EMAIL_PASSWORD in .env file"
+            print(f"[EMAIL ERROR] {error_msg}")
+            return False, error_msg
+        
+        if from_email == 'vonlandsbergjohn@gmail.com' and from_password == 'your-gmail-app-password-here':
+            error_msg = "Please update .env file with your actual Gmail App Password"
+            print(f"[EMAIL ERROR] {error_msg}")
+            return False, error_msg
         
         # Create message
         msg = MIMEMultipart()
@@ -107,35 +114,43 @@ def send_rejection_email(to_email, first_name):
         
         # Email body
         body = f"""
-        Dear {first_name},
-        
-        Thank you for your interest in joining the Altona Village community portal.
-        
-        After reviewing your application, we regret to inform you that your registration has not been approved at this time.
-        
-        If you believe this is an error or would like to discuss your application further, please contact the estate management office directly.
-        
-        Thank you for your understanding.
-        
-        Best regards,
-        Altona Village Management Team
+Dear {first_name},
+
+Thank you for your interest in joining the Altona Village community portal.
+
+After reviewing your application, we regret to inform you that your registration has not been approved at this time.
+
+If you believe this is an error or would like to discuss your application further, please contact the estate management office directly.
+
+Thank you for your understanding.
+
+Best regards,
+Altona Village Management Team
+
+---
+This is an automated message from the Altona Village Community Management System.
         """
         
         msg.attach(MIMEText(body, 'plain'))
         
         # Send email
+        print(f"[EMAIL] Connecting to {smtp_server}:{smtp_port}")
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
+        print(f"[EMAIL] Logging in as {from_email}")
         server.login(from_email, from_password)
         text = msg.as_string()
+        print(f"[EMAIL] Sending rejection email to {to_email}")
         server.sendmail(from_email, to_email, text)
         server.quit()
         
-        return True, "Email sent successfully"
+        success_msg = f"Rejection email sent successfully to {to_email}"
+        print(f"[EMAIL SUCCESS] {success_msg}")
+        return True, success_msg
         
     except Exception as e:
-        error_msg = f"Error sending rejection email: {str(e)}"
-        print(error_msg)
+        error_msg = f"Error sending rejection email to {to_email}: {str(e)}"
+        print(f"[EMAIL ERROR] {error_msg}")
         return False, error_msg
 
 def send_registration_notification_to_admin(user_email, first_name, last_name):
@@ -143,12 +158,24 @@ def send_registration_notification_to_admin(user_email, first_name, last_name):
     Send notification to admin when new user registers
     """
     try:
-        # Email configuration
+        # Email configuration from environment variables
         smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         smtp_port = int(os.getenv('SMTP_PORT', '587'))
-        from_email = os.getenv('FROM_EMAIL', 'your-email@gmail.com')
-        from_password = os.getenv('EMAIL_PASSWORD', 'your-app-password')
+        from_email = os.getenv('FROM_EMAIL')
+        from_password = os.getenv('EMAIL_PASSWORD')
         admin_email = os.getenv('ADMIN_EMAIL', 'vonlandsbergjohn@gmail.com')
+        app_url = os.getenv('APP_URL', 'http://localhost:5173')
+        
+        # Validate email configuration
+        if not from_email or not from_password:
+            error_msg = "Email configuration missing. Please set FROM_EMAIL and EMAIL_PASSWORD in .env file"
+            print(f"[EMAIL ERROR] {error_msg}")
+            return False
+        
+        if from_email == 'vonlandsbergjohn@gmail.com' and from_password == 'your-gmail-app-password-here':
+            error_msg = "Please update .env file with your actual Gmail App Password"
+            print(f"[EMAIL ERROR] {error_msg}")
+            return False
         
         # Create message
         msg = MIMEMultipart()
@@ -158,25 +185,30 @@ def send_registration_notification_to_admin(user_email, first_name, last_name):
         
         # Email body
         body = f"""
-        Dear Admin,
-        
-        A new user has registered for the Altona Village community portal and is awaiting approval.
-        
-        User Details:
-        - Name: {first_name} {last_name}
-        - Email: {user_email}
-        
-        Please log in to the admin dashboard to review and approve this registration.
-        
-        Login at: http://localhost:5173/login
-        
-        Best regards,
-        Altona Village Portal System
+Dear Admin,
+
+A new user has registered for the Altona Village community portal and is awaiting approval.
+
+User Details:
+• Name: {first_name} {last_name}
+• Email: {user_email}
+• Registration Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+Please log in to the admin dashboard to review and approve this registration.
+
+Admin Login: {app_url}/login
+
+Best regards,
+Altona Village Portal System
+
+---
+This is an automated notification from the Altona Village Community Management System.
         """
         
         msg.attach(MIMEText(body, 'plain'))
         
         # Send email
+        print(f"[EMAIL] Sending admin notification about new registration: {user_email}")
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         server.login(from_email, from_password)
@@ -184,8 +216,10 @@ def send_registration_notification_to_admin(user_email, first_name, last_name):
         server.sendmail(from_email, admin_email, text)
         server.quit()
         
+        print(f"[EMAIL SUCCESS] Admin notification sent for new registration: {user_email}")
         return True
         
     except Exception as e:
-        print(f"Error sending admin notification email: {str(e)}")
+        error_msg = f"Error sending admin notification email: {str(e)}"
+        print(f"[EMAIL ERROR] {error_msg}")
         return False
