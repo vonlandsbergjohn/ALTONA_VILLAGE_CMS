@@ -42,17 +42,17 @@ with app.app_context():
     
     # Create default admin user if it doesn't exist
     from src.models.user import User
-    admin_user = User.query.filter_by(email='admin@altonavillage.com').first()
+    admin_user = User.query.filter_by(email='vonlandsbergjohn@gmail.com').first()
     if not admin_user:
         admin_user = User(
-            email='admin@altonavillage.com',
+            email='vonlandsbergjohn@gmail.com',
             role='admin',
             status='active'
         )
-        admin_user.set_password('admin123')  # Change this in production
+        admin_user.set_password('dGdFHLCJxx44ykq')  # Change this in production
         db.session.add(admin_user)
         db.session.commit()
-        print("Default admin user created: admin@altonavillage.com / admin123")
+        print("Default admin user created: vonlandsbergjohn@gmail.com / dGdFHLCJxx44ykq")
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
