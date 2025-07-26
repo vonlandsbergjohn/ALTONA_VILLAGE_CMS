@@ -45,8 +45,8 @@ const Router = () => {
     return <LoginForm onSwitchToRegister={() => setShowRegister(true)} />;
   }
 
-  // Account not activated
-  if (user?.status !== 'active') {
+  // Account not activated (but allow admins)
+  if (user?.status !== 'active' && user?.role !== 'admin') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -89,7 +89,7 @@ const Router = () => {
         case '/admin/complaints':
           return <div>Complaints Management (Coming Soon)</div>;
         case '/admin/pending':
-         return <PendingRegistrations />;
+          return <PendingRegistrations />;
         case '/admin/communication':
           return <div>Communication Tools (Coming Soon)</div>;
         default:
