@@ -95,8 +95,8 @@ const LoginForm = ({ onSwitchToRegister }) => {
 
           <div className="mt-4 p-3 bg-gray-50 rounded-lg">
             <p className="text-xs text-gray-600 text-center">
-              <strong>Demo Credentials:</strong><br />
-              Admin: admin@altonavillage.com / admin123
+              <strong>Privacy Notice:</strong><br />
+              Your login details are confidential and protected. If you need access, please contact the Altona Village management office.
             </p>
           </div>
         </CardContent>
