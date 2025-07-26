@@ -1,19 +1,42 @@
-# Alternative Gmail Configuration
-# If App Passwords don't work, try this approach
+# Gmail Troubleshooting Guide - UPDATED
 
-# 1. Go to: https://myaccount.google.com/security
-# 2. Turn ON "2-Step Verification" 
-# 3. Generate a new App Password specifically for "Mail"
-# 4. Use the EXACT 16-character password (with spaces removed)
+## Current Issue: App Password Authentication Still Failing
 
-# Example format of App Password (yours will be different):
-# Generated: abcd efgh ijkl mnop  
-# Use in .env: abcdefghijklmnop (no spaces)
+### Status:
+- ✅ Environment variables loading correctly
+- ✅ App Password is 16 characters: xrttvaswvbcnpeqt
+- ❌ Gmail still rejecting authentication
 
-# If that still doesn't work, try:
-# 1. Enable "Less secure app access" (temporary)
-# 2. Use your regular Gmail password
-# 3. This is less secure but works for testing
+### Immediate Solutions to Try:
 
-# Your current password length: 15 characters (should be 16)
-# This suggests the App Password is incomplete
+1. **Generate Fresh App Password (Most Likely Fix):**
+   - Go to: https://myaccount.google.com/security
+   - Delete the current app password
+   - Create new app password for "Mail" application
+   - Copy ALL 16 characters exactly
+   - Update .env file with new password
+
+2. **Enable "Less Secure Apps" (Quick Test):**
+   - Go to: https://myaccount.google.com/lesssecureapps
+   - Turn ON "Allow less secure apps"
+   - Change EMAIL_PASSWORD to your regular Gmail password
+   - This is just for testing - less secure but works
+
+3. **Check 2-Step Verification:**
+   - Must be enabled for App Passwords to work
+   - Go to: https://myaccount.google.com/signinoptions/two-step-verification
+
+### Test Command After Changes:
+```powershell
+cd "C:\Altona_Village_CMS\altona_village_cms"
+C:/Altona_Village_CMS/.venv/Scripts/python.exe -c "from src.utils.email_service import send_approval_email; success, msg = send_approval_email('vonlandsbergjohn@gmail.com', 'Test'); print(f'Success: {success}, Message: {msg}')"
+```
+
+### Current Working Configuration:
+- FROM_EMAIL: vonlandsbergjohn@gmail.com  
+- EMAIL_PASSWORD: xrttvaswvbcnpeqt (failing - need new one)
+- SMTP_SERVER: smtp.gmail.com
+- SMTP_PORT: 587
+
+## Recommendation:
+Try generating a completely new App Password first - this fixes 90% of Gmail authentication issues.

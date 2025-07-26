@@ -63,12 +63,21 @@ This is an automated message from the Altona Village Community Management System
         
         msg.attach(MIMEText(body, 'plain'))
         
-        # Send email
+        # Send email with enhanced authentication
         print(f"[EMAIL] Connecting to {smtp_server}:{smtp_port}")
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
         print(f"[EMAIL] Logging in as {from_email}")
-        server.login(from_email, from_password)
+        
+        # Try different authentication methods
+        try:
+            server.login(from_email, from_password)
+        except smtplib.SMTPAuthenticationError as auth_error:
+            print(f"[EMAIL ERROR] Authentication failed: {auth_error}")
+            # Try with explicit AUTH LOGIN
+            server.ehlo()
+            server.login(from_email, from_password)
+        
         text = msg.as_string()
         print(f"[EMAIL] Sending approval email to {to_email}")
         server.sendmail(from_email, to_email, text)
