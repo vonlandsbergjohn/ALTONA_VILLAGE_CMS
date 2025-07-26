@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from src.models.user import User, Resident, db
+from src.utils.email_service import send_registration_notification_to_admin
 from datetime import timedelta
 
 auth_bp = Blueprint('auth', __name__)
@@ -67,9 +68,21 @@ def register():
 
         db.session.commit()
         
+        # Send notification email to admin about new registration
+        try:
+            send_registration_notification_to_admin(
+                user.email, 
+                data['first_name'], 
+                data['last_name']
+            )
+        except Exception as email_error:
+            print(f"Admin notification email failed: {email_error}")
+            # Don't fail registration if email fails
+        
         return jsonify({
-            'message': 'Registration successful. Awaiting admin approval.',
-            'user_id': user.id
+            'message': 'Registration successful. Your application is pending admin approval. You will receive an email notification once approved.',
+            'user_id': user.id,
+            'status': 'pending'
         }), 201
         
     except Exception as e:
@@ -88,7 +101,10 @@ def login():
             return jsonify({'error': 'Invalid email or password'}), 401
 
         if user.status != 'active':
-            return jsonify({'error': 'Account not activated. Please contact admin.'}), 401
+            if user.status == 'pending':
+                return jsonify({'error': 'Your account is still pending admin approval. You will receive an email notification once approved.'}), 401
+            else:
+                return jsonify({'error': 'Account not activated. Please contact admin.'}), 401
 
         # Create access token
         access_token = create_access_token(

@@ -1,0 +1,18 @@
+# Email Configuration for Altona Village CMS
+# Copy this file to .env and update with your actual email credentials
+
+# SMTP Settings
+SMTP_SERVER=smtp.gmail.com
+SMTP_PORT=587
+
+# Email Credentials (Use App Password for Gmail)
+FROM_EMAIL=your-email@gmail.com
+EMAIL_PASSWORD=your-app-password
+
+# Admin Email
+ADMIN_EMAIL=vonlandsbergjohn@gmail.com
+
+# Note: For Gmail, you need to:
+# 1. Enable 2-factor authentication
+# 2. Generate an App Password (not your regular password)
+# 3. Use the App Password in EMAIL_PASSWORD

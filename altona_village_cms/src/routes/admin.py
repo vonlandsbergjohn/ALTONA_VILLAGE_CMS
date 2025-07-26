@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.models.user import User, Resident, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
+from src.utils.email_service import send_approval_email
 from datetime import datetime
 
 admin_bp = Blueprint('admin', __name__)
@@ -47,8 +48,18 @@ def approve_registration(user_id):
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
+        # Update both status and role
         user.status = 'active'
+        user.role = 'resident'  # Change from 'pending' to 'resident'
         db.session.commit()
+        
+        # Send approval email notification
+        try:
+            if user.resident:
+                send_approval_email(user.email, user.resident.first_name)
+        except Exception as email_error:
+            print(f"Email sending failed: {email_error}")
+            # Don't fail the approval if email fails
         
         return jsonify({'message': 'Registration approved successfully'}), 200
         

@@ -69,15 +69,24 @@ const RegisterForm = ({ onSwitchToLogin }) => {
             <div className="mx-auto w-12 h-12 bg-green-600 rounded-full flex items-center justify-center mb-4">
               <CheckCircle className="h-6 w-6 text-white" />
             </div>
-            <CardTitle className="text-2xl font-bold text-green-600">Registration Successful!</CardTitle>
+            <CardTitle className="text-2xl font-bold text-green-600">Registration Submitted!</CardTitle>
             <CardDescription>
-              Your account has been created and is pending admin approval.
+              Your application is now pending admin approval.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <p className="text-sm text-gray-600 mb-4">
-              You will receive an email notification once your account is approved by the estate management.
+              <strong>What happens next:</strong><br/>
+              • Your application will be reviewed by estate management<br/>
+              • You will receive an email notification once approved<br/>
+              • Please check your email regularly for updates
             </p>
+            <div className="bg-blue-50 p-3 rounded-lg mb-4">
+              <p className="text-xs text-blue-700">
+                <strong>Note:</strong> The approval process typically takes 1-2 business days. 
+                If you have any questions, please contact the estate office directly.
+              </p>
+            </div>
             <Button onClick={onSwitchToLogin} className="w-full">
               Back to Login
             </Button>
