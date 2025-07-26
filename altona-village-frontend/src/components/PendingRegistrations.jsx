@@ -56,10 +56,39 @@ const PendingRegistrations = () => {
       ) : (
         <ul>
           {pending.map(user => (
-            <li key={user.id}>
+            <li key={user.id} style={{ marginBottom: '12px' }}>
               {user.name || user.email} ({user.email})
-              <button onClick={() => handleApprove(user.id)} style={{ marginLeft: '10px' }}>Approve</button>
-              <button onClick={() => handleReject(user.id)} style={{ marginLeft: '5px' }}>Reject</button>
+              <button
+                onClick={() => handleApprove(user.id)}
+                style={{
+                  marginLeft: '10px',
+                  padding: '6px 16px',
+                  background: '#4CAF50',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  marginRight: '6px'
+                }}
+              >
+                Approve
+              </button>
+              <button
+                onClick={() => handleReject(user.id)}
+                style={{
+                  marginLeft: '5px',
+                  padding: '6px 16px',
+                  background: '#f44336',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Reject
+              </button>
             </li>
           ))}
         </ul>
