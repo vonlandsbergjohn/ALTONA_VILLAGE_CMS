@@ -1,12 +1,18 @@
 import React, { useEffect, useState } from 'react';
 
+// Helper to get JWT token from localStorage (adjust if you store it differently)
+const getToken = () => localStorage.getItem('token');
+
 const PendingRegistrations = () => {
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Replace with your actual API endpoint
-    fetch('/api/pending-registrations')
+    fetch('/api/admin/pending-registrations', {
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    })
       .then(res => res.json())
       .then(data => {
         setPending(data);
@@ -15,8 +21,12 @@ const PendingRegistrations = () => {
   }, []);
 
   const handleApprove = (userId) => {
-    // TODO: Replace with your actual API endpoint
-    fetch(`/api/pending-registrations/${userId}/approve`, { method: 'POST' })
+    fetch(`/api/admin/approve-registration/${userId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    })
       .then(res => res.json())
       .then(() => {
         setPending(pending.filter(user => user.id !== userId));
@@ -24,8 +34,12 @@ const PendingRegistrations = () => {
   };
 
   const handleReject = (userId) => {
-    // TODO: Replace with your actual API endpoint
-    fetch(`/api/pending-registrations/${userId}/reject`, { method: 'POST' })
+    fetch(`/api/admin/reject-registration/${userId}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getToken()}`
+      }
+    })
       .then(res => res.json())
       .then(() => {
         setPending(pending.filter(user => user.id !== userId));
@@ -43,7 +57,7 @@ const PendingRegistrations = () => {
         <ul>
           {pending.map(user => (
             <li key={user.id}>
-              {user.name} ({user.email})
+              {user.name || user.email} ({user.email})
               <button onClick={() => handleApprove(user.id)} style={{ marginLeft: '10px' }}>Approve</button>
               <button onClick={() => handleReject(user.id)} style={{ marginLeft: '5px' }}>Reject</button>
             </li>
