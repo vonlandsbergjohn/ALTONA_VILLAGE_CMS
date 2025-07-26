@@ -14,6 +14,24 @@ const PendingRegistrations = () => {
       });
   }, []);
 
+  const handleApprove = (userId) => {
+    // TODO: Replace with your actual API endpoint
+    fetch(`/api/pending-registrations/${userId}/approve`, { method: 'POST' })
+      .then(res => res.json())
+      .then(() => {
+        setPending(pending.filter(user => user.id !== userId));
+      });
+  };
+
+  const handleReject = (userId) => {
+    // TODO: Replace with your actual API endpoint
+    fetch(`/api/pending-registrations/${userId}/reject`, { method: 'POST' })
+      .then(res => res.json())
+      .then(() => {
+        setPending(pending.filter(user => user.id !== userId));
+      });
+  };
+
   if (loading) return <div>Loading...</div>;
 
   return (
@@ -26,7 +44,8 @@ const PendingRegistrations = () => {
           {pending.map(user => (
             <li key={user.id}>
               {user.name} ({user.email})
-              {/* Add Approve/Reject buttons here later */}
+              <button onClick={() => handleApprove(user.id)} style={{ marginLeft: '10px' }}>Approve</button>
+              <button onClick={() => handleReject(user.id)} style={{ marginLeft: '5px' }}>Reject</button>
             </li>
           ))}
         </ul>
