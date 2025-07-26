@@ -1,20 +1,18 @@
 {
-    // ...other settings...
     "terminal.integrated.profiles.windows": {
         "Backend (Altona CMS)": {
             "path": "C:\\Windows\\System32\\cmd.exe",
             "args": [
                 "/k",
-                "cd /d \"c:\\Users\\WIEKUS\\OneDrive\\Altona Village Laptop\\CMS unzip1\\Altona_Village_CMS\\altona_village_cms\\src\" && .venv\\Scripts\\activate"
+                "cd /d \"c:\\Users\\WIEKUS\\OneDrive\\Altona Village Laptop\\CMS unzip1\\Altona_Village_CMS\\altona_village_cms\\src\" && .venv\\Scripts\\activate && python main.py"
             ]
         },
         "Frontend (Altona CMS)": {
             "path": "C:\\Windows\\System32\\cmd.exe",
             "args": [
                 "/k",
-                "cd /d \"c:\\Users\\WIEKUS\\OneDrive\\Altona Village Laptop\\CMS unzip1\\Altona_Village_CMS\\altona-village-frontend\""
+                "cd /d \"c:\\Users\\WIEKUS\\OneDrive\\Altona Village Laptop\\CMS unzip1\\Altona_Village_CMS\\altona-village-frontend\" && npm run dev"
             ]
         }
     }
-}{
 }
