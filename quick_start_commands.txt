@@ -1,0 +1,26 @@
+# Altona Village CMS - Quick Start Commands
+
+## PowerShell Commands (Copy & Paste):
+
+### Backend Server:
+cd "C:\Altona_Village_CMS\altona_village_cms\src"; C:\Altona_Village_CMS\.venv\Scripts\python.exe main.py
+
+### Frontend Server:
+cd "C:\Altona_Village_CMS\altona-village-frontend"; npm run dev
+
+## Alternative - Batch Files:
+- Double-click: start_backend.bat
+- Double-click: start_frontend.bat
+
+## VS Code Tasks:
+- Ctrl+Shift+P → Tasks: Run Task → Start Backend
+- Ctrl+Shift+P → Tasks: Run Task → Start Frontend
+
+## URLs:
+- Frontend: http://localhost:5173
+- Backend API: http://127.0.0.1:5000
+- Admin Login: vonlandsbergjohn@gmail.com / dGdFHLCJxx44ykq
+
+## Email Configuration:
+- FROM_EMAIL: vonlandsbergjohn@gmail.com
+- App Password: xrttvaswvbcnpeqt (16 characters)
