@@ -18,12 +18,16 @@ const RegisterForm = ({ onSwitchToLogin }) => {
     phone_number: '',
     emergency_contact_name: '',
     emergency_contact_number: '',
+    id_number: '',
+    erf_number: '',
+    address: '',
     is_owner: false,
+    is_resident: false, // NEW
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  
+
   const { register } = useAuth();
 
   const handleChange = (e) => {
@@ -47,13 +51,13 @@ const RegisterForm = ({ onSwitchToLogin }) => {
 
     const { confirmPassword, ...submitData } = formData;
     const result = await register(submitData);
-    
+
     if (result.success) {
       setSuccess(true);
     } else {
       setError(result.error);
     }
-    
+
     setLoading(false);
   };
 
@@ -102,7 +106,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="first_name">First Name</Label>
@@ -127,7 +131,41 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 />
               </div>
             </div>
-            
+
+            <div className="space-y-2">
+              <Label htmlFor="id_number">ID Number</Label>
+              <Input
+                id="id_number"
+                name="id_number"
+                value={formData.id_number}
+                onChange={handleChange}
+                placeholder="Enter your ID number"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="erf_number">Erf Number</Label>
+              <Input
+                id="erf_number"
+                name="erf_number"
+                value={formData.erf_number}
+                onChange={handleChange}
+                placeholder="e.g. 123"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="address">Address in Altona Village</Label>
+              <Input
+                id="address"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                placeholder="e.g. 10 Main Street"
+                required
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -140,7 +178,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 required
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="phone_number">Phone Number</Label>
               <Input
@@ -151,7 +189,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 placeholder="+27 123 456 7890"
               />
             </div>
-            
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
@@ -178,7 +216,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 />
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="emergency_contact_name">Emergency Contact Name</Label>
               <Input
@@ -189,7 +227,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 placeholder="Emergency contact person"
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="emergency_contact_number">Emergency Contact Number</Label>
               <Input
@@ -200,7 +238,19 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 placeholder="+27 123 456 7890"
               />
             </div>
-            
+
+            {/* NEW CHECKBOXES */}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="is_resident"
+                name="is_resident"
+                checked={formData.is_resident}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_resident: checked }))}
+              />
+              <Label htmlFor="is_resident" className="text-sm">
+                Will you be a resident here?
+              </Label>
+            </div>
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="is_owner"
@@ -209,16 +259,17 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_owner: checked }))}
               />
               <Label htmlFor="is_owner" className="text-sm">
-                I am a property owner (uncheck if tenant)
+                Are you the registered owner?
               </Label>
             </div>
-            
+            {/* END NEW CHECKBOXES */}
+
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Register
             </Button>
           </form>
-          
+
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Already have an account?{' '}
@@ -237,4 +288,3 @@ const RegisterForm = ({ onSwitchToLogin }) => {
 };
 
 export default RegisterForm;
-
