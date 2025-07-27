@@ -23,7 +23,8 @@ import {
   Clock,
   Filter,
   X,
-  KeyRound
+  KeyRound,
+  UserCheck
 } from 'lucide-react';
 
 const AdminResidents = () => {
@@ -129,7 +130,8 @@ const AdminResidents = () => {
         emergency_contact_phone: selectedResident.emergency_contact_number,
         property_address: selectedResident.full_address,
         tenant_or_owner: selectedResident.is_owner ? 'owner' : 'tenant',
-        intercom_code: selectedResident.intercom_code
+        intercom_code: selectedResident.intercom_code,
+        resident_status_change: getResidentStatusValue(selectedResident)
       };
 
       console.log('Updating resident with data:', updateData);
@@ -149,6 +151,36 @@ const AdminResidents = () => {
     } finally {
       setUpdateLoading(false);
     }
+  };
+
+  const getResidentStatusValue = (resident) => {
+    if (resident.is_resident && resident.is_owner) return 'owner-resident';
+    if (resident.is_owner) return 'owner';
+    if (resident.is_resident) return 'resident';
+    return 'resident'; // Default fallback
+  };
+
+  const handleResidentStatusChange = (newStatus) => {
+    const updates = { ...selectedResident };
+    
+    switch (newStatus) {
+      case 'resident':
+        updates.is_resident = true;
+        updates.is_owner = false;
+        break;
+      case 'owner':
+        updates.is_resident = false;
+        updates.is_owner = true;
+        break;
+      case 'owner-resident':
+        updates.is_resident = true;
+        updates.is_owner = true;
+        break;
+      default:
+        break;
+    }
+    
+    setSelectedResident(updates);
   };
 
   const getResidentTypeLabel = (resident) => {
@@ -332,6 +364,12 @@ const AdminResidents = () => {
                   <MapPin className="w-4 h-4 mr-2" />
                   {resident.full_address || 'No address provided'}
                 </div>
+                {resident.intercom_code && (
+                  <div className="flex items-center text-gray-600">
+                    <KeyRound className="w-4 h-4 mr-2" />
+                    Code: {resident.intercom_code}
+                  </div>
+                )}
                 <div className="flex items-center text-gray-600">
                   <Home className="w-4 h-4 mr-2" />
                   Erf {resident.erf_number}
@@ -493,6 +531,26 @@ const AdminResidents = () => {
                     className="pl-10"
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit_resident_status">Resident Status</Label>
+                <div className="relative">
+                  <UserCheck className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <select
+                    id="edit_resident_status"
+                    value={getResidentStatusValue(selectedResident)}
+                    onChange={(e) => handleResidentStatusChange(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-10 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  >
+                    <option value="resident">Resident Only</option>
+                    <option value="owner">Owner Only</option>
+                    <option value="owner-resident">Owner-Resident</option>
+                  </select>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Change the user's status between resident, owner, or both
+                </p>
               </div>
 
               <div className="flex justify-end space-x-2 pt-4">

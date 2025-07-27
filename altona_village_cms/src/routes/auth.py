@@ -288,6 +288,76 @@ def update_profile():
         if 'emergency_contact_phone' in data:
             data['emergency_contact_number'] = data['emergency_contact_phone']
         
+        # Handle tenant_or_owner status change
+        if 'tenant_or_owner' in data:
+            current_is_resident = user.resident is not None
+            current_is_owner = user.owner is not None
+            new_status = data['tenant_or_owner']
+            
+            print(f"[DEBUG] Status change: current resident={current_is_resident}, owner={current_is_owner}, new_status={new_status}")
+            
+            # Get name components for new records
+            if 'first_name' in data and 'last_name' in data:
+                first_name = data['first_name']
+                last_name = data['last_name']
+            else:
+                # Use existing names from current records
+                if user.resident:
+                    first_name = user.resident.first_name
+                    last_name = user.resident.last_name
+                elif user.owner:
+                    first_name = user.owner.first_name
+                    last_name = user.owner.last_name
+                else:
+                    first_name = ''
+                    last_name = ''
+            
+            if new_status == 'tenant' and not current_is_resident:
+                # Create new resident record
+                print("[DEBUG] Creating new resident record")
+                resident = Resident(
+                    user_id=user.id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone_number=data.get('phone_number', user.owner.phone_number if user.owner else ''),
+                    emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
+                    emergency_contact_number=data.get('emergency_contact_number', user.owner.emergency_contact_number if user.owner else ''),
+                    intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
+                    street_number=user.owner.street_number if user.owner else '',
+                    street_name=user.owner.street_name if user.owner else '',
+                    full_address=data.get('full_address', user.owner.full_address if user.owner else '')
+                )
+                db.session.add(resident)
+                
+                # If was only owner, remove owner record
+                if current_is_owner:
+                    print("[DEBUG] Removing owner record")
+                    db.session.delete(user.owner)
+            
+            elif new_status == 'owner' and not current_is_owner:
+                # Create new owner record
+                print("[DEBUG] Creating new owner record")
+                owner = Owner(
+                    user_id=user.id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone_number=data.get('phone_number', user.resident.phone_number if user.resident else ''),
+                    emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
+                    emergency_contact_number=data.get('emergency_contact_number', user.resident.emergency_contact_number if user.resident else ''),
+                    intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
+                    street_number=user.resident.street_number if user.resident else '',
+                    street_name=user.resident.street_name if user.resident else '',
+                    full_address=data.get('full_address', user.resident.full_address if user.resident else ''),
+                    id_number=user.resident.id_number if user.resident else '',
+                    erf_number=user.resident.erf_number if user.resident else ''
+                )
+                db.session.add(owner)
+                
+                # If was only resident, remove resident record
+                if current_is_resident:
+                    print("[DEBUG] Removing resident record")
+                    db.session.delete(user.resident)
+        
         # Update Resident information if user is a resident
         if user.resident and any(field in data for field in [
             'first_name', 'last_name', 'phone_number', 'id_number', 

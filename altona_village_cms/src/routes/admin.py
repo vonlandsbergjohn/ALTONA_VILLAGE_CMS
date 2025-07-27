@@ -175,6 +175,7 @@ def get_all_residents():
                     'street_number': owner.street_number,
                     'street_name': owner.street_name,
                     'full_address': owner.full_address,
+                    'intercom_code': owner.intercom_code,
                 })
             
             result.append(user_data)
@@ -268,6 +269,101 @@ def update_resident(user_id):
                 owner.street_number = street_number
                 owner.street_name = street_name
                 owner.full_address = data['property_address']
+        
+        # Handle resident status change
+        if 'resident_status_change' in data:
+            new_status = data['resident_status_change']
+            current_is_resident = user.resident is not None
+            current_is_owner = user.owner is not None
+            
+            # Get name components for new records
+            if 'full_name' in data:
+                names = data['full_name'].strip().split(' ', 1)
+                first_name = names[0]
+                last_name = names[1] if len(names) > 1 else ''
+            else:
+                # Use existing names from current records
+                if user.resident:
+                    first_name = user.resident.first_name
+                    last_name = user.resident.last_name
+                elif user.owner:
+                    first_name = user.owner.first_name
+                    last_name = user.owner.last_name
+                else:
+                    first_name = ''
+                    last_name = ''
+            
+            if new_status == 'resident' and not current_is_resident:
+                # Create new resident record
+                resident = Resident(
+                    user_id=user.id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone_number=data.get('phone', user.owner.phone_number if user.owner else ''),
+                    emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
+                    emergency_contact_number=data.get('emergency_contact_phone', user.owner.emergency_contact_number if user.owner else ''),
+                    intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
+                    street_number=user.owner.street_number if user.owner else '',
+                    street_name=user.owner.street_name if user.owner else '',
+                    full_address=data.get('property_address', user.owner.full_address if user.owner else '')
+                )
+                db.session.add(resident)
+                
+                # If was only owner, remove owner record
+                if current_is_owner and not current_is_resident:
+                    db.session.delete(user.owner)
+            
+            elif new_status == 'owner' and not current_is_owner:
+                # Create new owner record
+                owner = Owner(
+                    user_id=user.id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone_number=data.get('phone', user.resident.phone_number if user.resident else ''),
+                    emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
+                    emergency_contact_number=data.get('emergency_contact_phone', user.resident.emergency_contact_number if user.resident else ''),
+                    intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
+                    street_number=user.resident.street_number if user.resident else '',
+                    street_name=user.resident.street_name if user.resident else '',
+                    full_address=data.get('property_address', user.resident.full_address if user.resident else '')
+                )
+                db.session.add(owner)
+                
+                # If was only resident, remove resident record
+                if current_is_resident and not current_is_owner:
+                    db.session.delete(user.resident)
+            
+            elif new_status == 'owner-resident':
+                # Ensure both records exist
+                if not current_is_resident:
+                    resident = Resident(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone', user.owner.phone_number if user.owner else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
+                        emergency_contact_number=data.get('emergency_contact_phone', user.owner.emergency_contact_number if user.owner else ''),
+                        intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
+                        street_number=user.owner.street_number if user.owner else '',
+                        street_name=user.owner.street_name if user.owner else '',
+                        full_address=data.get('property_address', user.owner.full_address if user.owner else '')
+                    )
+                    db.session.add(resident)
+                
+                if not current_is_owner:
+                    owner = Owner(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone', user.resident.phone_number if user.resident else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
+                        emergency_contact_number=data.get('emergency_contact_phone', user.resident.emergency_contact_number if user.resident else ''),
+                        intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
+                        street_number=user.resident.street_number if user.resident else '',
+                        street_name=user.resident.street_name if user.resident else '',
+                        full_address=data.get('property_address', user.resident.full_address if user.resident else '')
+                    )
+                    db.session.add(owner)
         
         user.updated_at = datetime.utcnow()
         db.session.commit()
