@@ -462,6 +462,12 @@ A: This is common, especially for Yahoo Mail users. To fix this:
 3. Add vonlandsbergjohn@gmail.com to your contacts or safe senders list
 4. For company emails, ask your IT department to whitelist our sending address
 
+**Q: Why don't the email links work on my mobile phone?**
+A: If email links work on your laptop but not on your mobile phone, this usually means the email contains a "localhost" URL that only works on the device running the server. The system should be configured with your network IP address (like http://192.168.0.23:5174) so that links work on all devices including mobile phones. Contact estate management to update the server configuration for mobile compatibility.
+
+**Q: Is the system mobile-friendly?**
+A: Yes! The Altona Village CMS is fully responsive and works perfectly on mobile phones, tablets, and laptops. You can access all features from any device with a web browser. If you're having trouble accessing the system from your phone, ensure you're using the correct URL and that both devices are on the same WiFi network.
+
 **Q: Can I opt out of community announcements?**
 A: You can opt out of non-essential communications, but you'll continue to receive critical safety, security, and emergency notifications. These cannot be disabled for your safety and security.
 
