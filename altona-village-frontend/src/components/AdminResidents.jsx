@@ -128,7 +128,8 @@ const AdminResidents = () => {
         emergency_contact_name: selectedResident.emergency_contact_name,
         emergency_contact_phone: selectedResident.emergency_contact_number,
         property_address: selectedResident.full_address,
-        tenant_or_owner: selectedResident.is_owner ? 'owner' : 'tenant'
+        tenant_or_owner: selectedResident.is_owner ? 'owner' : 'tenant',
+        intercom_code: selectedResident.intercom_code
       };
 
       console.log('Updating resident with data:', updateData);

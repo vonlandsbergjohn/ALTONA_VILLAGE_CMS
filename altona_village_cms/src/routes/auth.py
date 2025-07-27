@@ -208,7 +208,8 @@ def profile():
         'property_address': '',
         'tenant_or_owner': '',
         'emergency_contact_name': '',
-        'emergency_contact_phone': ''
+        'emergency_contact_phone': '',
+        'intercom_code': ''
     }
     
     # Add resident data if available
@@ -218,7 +219,8 @@ def profile():
             'phone': resident.phone_number or '',
             'property_address': resident.full_address or '',
             'emergency_contact_name': resident.emergency_contact_name or '',
-            'emergency_contact_phone': resident.emergency_contact_number or ''
+            'emergency_contact_phone': resident.emergency_contact_number or '',
+            'intercom_code': resident.intercom_code or ''
         })
     
     # Add owner data if available (overrides resident data for shared fields)
@@ -228,7 +230,8 @@ def profile():
             'phone': owner.phone_number or profile_data['phone'],
             'property_address': owner.full_address or profile_data['property_address'],
             'emergency_contact_name': owner.emergency_contact_name or profile_data['emergency_contact_name'],
-            'emergency_contact_phone': owner.emergency_contact_number or profile_data['emergency_contact_phone']
+            'emergency_contact_phone': owner.emergency_contact_number or profile_data['emergency_contact_phone'],
+            'intercom_code': owner.intercom_code or profile_data['intercom_code']
         })
     
     # Determine tenant_or_owner status
@@ -255,6 +258,7 @@ def update_profile():
         
         data = request.get_json()
         print(f"[DEBUG] Received profile update data: {data}")
+        print(f"[DEBUG] Intercom code in data: {data.get('intercom_code', 'NOT_FOUND')}")
         if not data:
             return jsonify({'error': 'No data received'}), 400
         
@@ -326,7 +330,9 @@ def update_profile():
             
             # Update intercom code
             if 'intercom_code' in data:
+                print(f"[DEBUG] Updating resident intercom_code: {data['intercom_code']}")
                 resident.intercom_code = data['intercom_code']
+                print(f"[DEBUG] Resident intercom_code set to: {resident.intercom_code}")
             
             # Update timestamps
             from datetime import datetime
@@ -410,7 +416,9 @@ def update_profile():
             
             # Update intercom code
             if 'intercom_code' in data:
+                print(f"[DEBUG] Updating owner intercom_code: {data['intercom_code']}")
                 owner.intercom_code = data['intercom_code']
+                print(f"[DEBUG] Owner intercom_code set to: {owner.intercom_code}")
             
             # Update timestamps
             from datetime import datetime

@@ -157,6 +157,7 @@ def get_all_residents():
                     'street_number': resident.street_number,
                     'street_name': resident.street_name,
                     'full_address': resident.full_address,
+                    'intercom_code': resident.intercom_code,
                 })
             
             # Add owner data if available (and no resident data)
@@ -227,6 +228,9 @@ def update_resident(user_id):
             if 'emergency_contact_phone' in data:
                 resident.emergency_contact_number = data['emergency_contact_phone']
             
+            if 'intercom_code' in data:
+                resident.intercom_code = data['intercom_code']
+            
             if 'property_address' in data:
                 # Parse the address and update components
                 from src.routes.auth import parse_address
@@ -253,6 +257,9 @@ def update_resident(user_id):
             
             if 'emergency_contact_phone' in data:
                 owner.emergency_contact_number = data['emergency_contact_phone']
+            
+            if 'intercom_code' in data:
+                owner.intercom_code = data['intercom_code']
             
             if 'property_address' in data:
                 # Parse the address and update components
