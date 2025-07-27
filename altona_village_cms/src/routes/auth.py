@@ -203,13 +203,18 @@ def profile():
         'email': user.email,
         'role': user.role,
         'status': user.status,
+        'is_resident': user.is_resident(),  # Add the flags
+        'is_owner': user.is_owner(),        # Add the flags
+        'is_owner_resident': user.is_owner_resident(),
         'full_name': user.get_full_name() or '',
         'phone': '',
         'property_address': '',
         'tenant_or_owner': '',
         'emergency_contact_name': '',
         'emergency_contact_phone': '',
-        'intercom_code': ''
+        'intercom_code': '',
+        'resident': user.resident.to_dict() if user.resident else None,  # Include resident data
+        'owner': user.owner.to_dict() if user.owner else None  # Include owner data
     }
     
     # Add resident data if available

@@ -54,6 +54,7 @@ export const adminAPI = {
   getAllComplaints: () => api.get('/admin/complaints'),
   updateComplaint: (complaintId, data) => api.post(`/admin/complaints/${complaintId}/update`, data),
   getGateRegister: () => api.get('/admin/gate-register'),
+  exportGateRegister: () => api.get('/admin/gate-register/export', { responseType: 'blob' }),
   getResidentEmails: () => api.get('/admin/communication/emails'),
   getResidentPhones: () => api.get('/admin/communication/phones'),
 };

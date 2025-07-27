@@ -13,22 +13,38 @@ export const useAuth = () => {
 
 // Helper function to get user's actual residency type
 export const getUserResidencyType = (user) => {
-  if (!user) return 'Unknown';
+  if (!user) {
+    return 'Unknown';
+  }
   
   // For admin users
-  if (user.role === 'admin') return 'Admin';
+  if (user.role === 'admin') {
+    return 'Admin';
+  }
   
   const isResident = user.is_resident;
   const isOwner = user.is_owner;
   
-  if (isResident && isOwner) return 'Owner-Resident';
-  if (isOwner) return 'Property Owner';
-  if (isResident) return 'Resident';
+  if (isResident && isOwner) {
+    return 'Owner-Resident';
+  }
+  if (isOwner) {
+    return 'Property Owner';
+  }
+  if (isResident) {
+    return 'Resident';
+  }
   
   // Fallback - if no flags are set, check if user has resident or owner data
-  if (user.resident && user.owner) return 'Owner-Resident';
-  if (user.owner) return 'Property Owner'; 
-  if (user.resident) return 'Resident';
+  if (user.resident && user.owner) {
+    return 'Owner-Resident';
+  }
+  if (user.owner) {
+    return 'Property Owner'; 
+  }
+  if (user.resident) {
+    return 'Resident';
+  }
   
   return 'Unknown';
 };

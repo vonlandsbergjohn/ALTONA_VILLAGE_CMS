@@ -11,8 +11,8 @@ from src.routes.user import user_bp
 from src.routes.auth import auth_bp
 from src.routes.admin import admin_bp
 from src.routes.communication import communication_bp
-
 from src.routes.resident import resident_bp
+from src.routes.gate_register import gate_register_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
@@ -30,6 +30,7 @@ app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(resident_bp, url_prefix='/api/resident')
 app.register_blueprint(communication_bp, url_prefix='/api/communication')
+app.register_blueprint(gate_register_bp, url_prefix='/api/admin')
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"

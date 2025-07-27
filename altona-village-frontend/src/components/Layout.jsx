@@ -23,9 +23,9 @@ const Layout = ({ children }) => {
     { icon: Home, label: 'Dashboard', path: '/admin' },
     { icon: Users, label: 'Residents', path: '/admin/residents' },
     { icon: Building, label: 'Properties', path: '/admin/properties' },
-    { icon: Car, label: 'Gate Register', path: '/admin/gate-register' },
+    { icon: Shield, label: 'Gate Register', path: '/admin/gate-register' },
     { icon: MessageSquare, label: 'Complaints', path: '/admin/complaints' },
-    { icon: Shield, label: 'Pending Approvals', path: '/admin/pending' },
+    { icon: Car, label: 'Pending Approvals', path: '/admin/pending' },
     { icon: Settings, label: 'Communication', path: '/admin/communication' },
   ];
 
