@@ -23,8 +23,8 @@ def get_gate_register():
         return jsonify({'error': 'Unauthorized access'}), 403
     
     try:
-        # Get all active users with approved status
-        active_users = User.query.filter_by(status='approved').all()
+        # Get all active users with active status
+        active_users = User.query.filter_by(status='active').all()
         
         gate_entries = []
         
@@ -59,6 +59,10 @@ def get_gate_register():
             vehicle_registrations = []
             if resident_data:
                 vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            elif owner_data:
+                # Owners also need vehicles for property visits
+                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
                 vehicle_registrations = [v.registration_number for v in vehicles]
             
             # Create entry for gate register
@@ -105,7 +109,7 @@ def export_gate_register_csv():
     
     try:
         # Get gate register data (reuse logic from above)
-        active_users = User.query.filter_by(status='approved').all()
+        active_users = User.query.filter_by(status='active').all()
         gate_entries = []
         
         for user in active_users:
@@ -136,6 +140,10 @@ def export_gate_register_csv():
             vehicle_registrations = []
             if resident_data:
                 vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            elif owner_data:
+                # Owners also need vehicles for property visits
+                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
                 vehicle_registrations = [v.registration_number for v in vehicles]
             
             # Handle multiple vehicles - create separate row for each vehicle

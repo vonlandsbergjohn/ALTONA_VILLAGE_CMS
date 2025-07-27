@@ -270,9 +270,9 @@ def update_resident(user_id):
                 owner.street_name = street_name
                 owner.full_address = data['property_address']
         
-        # Handle resident status change
-        if 'resident_status_change' in data:
-            new_status = data['resident_status_change']
+        # Handle resident status change (support both field names for compatibility)
+        if 'resident_status_change' in data or 'tenant_or_owner' in data:
+            new_status = data.get('resident_status_change') or data.get('tenant_or_owner')
             current_is_resident = user.resident is not None
             current_is_owner = user.owner is not None
             
@@ -293,7 +293,7 @@ def update_resident(user_id):
                     first_name = ''
                     last_name = ''
             
-            if new_status == 'resident' and not current_is_resident:
+            if (new_status == 'resident' or new_status == 'tenant') and not current_is_resident:
                 # Create new resident record
                 resident = Resident(
                     user_id=user.id,
@@ -535,46 +535,30 @@ def get_all_complaints():
 @admin_bp.route('/complaints/<complaint_id>/update', methods=['POST'])
 @jwt_required()
 def update_complaint(complaint_id):
-    print(f'=== COMPLAINT UPDATE BACKEND DEBUG ===')
-    print(f'Complaint ID received: {complaint_id}')
-    print(f'Complaint ID type: {type(complaint_id)}')
-    print(f'Request data: {request.get_json()}')
-    
     admin_check = admin_required()
     if admin_check:
-        print('Admin check failed')
         return admin_check
     
     try:
         user_id = get_jwt_identity()
         data = request.get_json()
-        print(f'User ID: {user_id}')
-        print(f'Request data parsed: {data}')
         
         complaint = Complaint.query.get(complaint_id)
-        print(f'Complaint found: {complaint}')
         if not complaint:
-            print('Complaint not found in database')
             return jsonify({'error': 'Complaint not found'}), 404
-        
-        print(f'Current complaint status: {complaint.status}')
         
         # Update complaint status if provided
         if 'status' in data:
-            print(f'Updating status from {complaint.status} to {data["status"]}')
             complaint.status = data['status']
         
         if 'priority' in data:
-            print(f'Updating priority to {data["priority"]}')
             complaint.priority = data['priority']
         
         if 'assigned_to' in data:
-            print(f'Updating assigned_to to {data["assigned_to"]}')
             complaint.assigned_to = data['assigned_to']
         
         # Add update if provided
         if 'update_text' in data:
-            print(f'Adding update text: {data["update_text"]}')
             update = ComplaintUpdate(
                 complaint_id=complaint_id,
                 user_id=user_id,
@@ -582,17 +566,11 @@ def update_complaint(complaint_id):
             )
             db.session.add(update)
         
-        print('Committing changes to database')
         db.session.commit()
-        print('Changes committed successfully')
         
         return jsonify({'message': 'Complaint updated successfully'}), 200
         
     except Exception as e:
-        print(f'Exception occurred: {str(e)}')
-        print(f'Exception type: {type(e)}')
-        import traceback
-        traceback.print_exc()
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
@@ -936,18 +914,27 @@ def get_gate_access_register():
 @admin_bp.route('/residents/<user_id>/vehicles', methods=['GET'])
 @jwt_required()
 def get_resident_vehicles(user_id):
-    """Get all vehicles for a specific resident (admin access)"""
+    """Get all vehicles for a specific user (admin access) - supports both residents and owners"""
     admin_check = admin_required()
     if admin_check:
         return admin_check
     
     try:
         user = User.query.get_or_404(user_id)
-        if not user.resident:
-            return jsonify({'error': 'User is not a resident'}), 400
         
-        vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
-        return jsonify([vehicle.to_dict() for vehicle in vehicles]), 200
+        vehicles = []
+        
+        # Get vehicles from resident data
+        if user.resident:
+            resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
+            vehicles.extend([vehicle.to_dict() for vehicle in resident_vehicles])
+        
+        # Get vehicles from owner data (for owner-only users)
+        if user.owner and not user.resident:
+            owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
+            vehicles.extend([vehicle.to_dict() for vehicle in owner_vehicles])
+        
+        return jsonify(vehicles), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -955,15 +942,17 @@ def get_resident_vehicles(user_id):
 @admin_bp.route('/residents/<user_id>/vehicles', methods=['POST'])
 @jwt_required()
 def add_resident_vehicle(user_id):
-    """Add a vehicle for a specific resident (admin access)"""
+    """Add a vehicle for a specific user (admin access) - supports both residents and owners"""
     admin_check = admin_required()
     if admin_check:
         return admin_check
     
     try:
         user = User.query.get_or_404(user_id)
-        if not user.resident:
-            return jsonify({'error': 'User is not a resident'}), 400
+        
+        # Must be either a resident or owner
+        if not user.resident and not user.owner:
+            return jsonify({'error': 'User must be a resident or owner to have vehicles'}), 400
         
         data = request.get_json()
         
@@ -976,9 +965,10 @@ def add_resident_vehicle(user_id):
         if existing_vehicle:
             return jsonify({'error': 'Vehicle with this registration number already exists'}), 400
         
-        # Create new vehicle
+        # Create new vehicle - prefer resident_id if available, otherwise use owner_id
         vehicle = Vehicle(
-            resident_id=user.resident.id,
+            resident_id=user.resident.id if user.resident else None,
+            owner_id=user.owner.id if (user.owner and not user.resident) else None,
             registration_number=data['registration_number'],
             make=data.get('make', ''),
             model=data.get('model', ''),
@@ -1000,17 +990,21 @@ def add_resident_vehicle(user_id):
 @admin_bp.route('/residents/<user_id>/vehicles/<vehicle_id>', methods=['PUT'])
 @jwt_required()
 def update_resident_vehicle(user_id, vehicle_id):
-    """Update a vehicle for a specific resident (admin access)"""
+    """Update a vehicle for a specific user (admin access) - supports both residents and owners"""
     admin_check = admin_required()
     if admin_check:
         return admin_check
     
     try:
         user = User.query.get_or_404(user_id)
-        if not user.resident:
-            return jsonify({'error': 'User is not a resident'}), 400
         
-        vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=user.resident.id).first()
+        # Find vehicle belonging to this user (resident or owner)
+        vehicle = None
+        if user.resident:
+            vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=user.resident.id).first()
+        if not vehicle and user.owner:
+            vehicle = Vehicle.query.filter_by(id=vehicle_id, owner_id=user.owner.id).first()
+        
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
         
@@ -1042,21 +1036,26 @@ def update_resident_vehicle(user_id, vehicle_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/residents/<user_id>/vehicles/<vehicle_id>', methods=['DELETE'])
 @jwt_required()
 def delete_resident_vehicle(user_id, vehicle_id):
-    """Delete a vehicle for a specific resident (admin access)"""
+    """Delete a vehicle for a specific user (admin access) - supports both residents and owners"""
     admin_check = admin_required()
     if admin_check:
         return admin_check
     
     try:
         user = User.query.get_or_404(user_id)
-        if not user.resident:
-            return jsonify({'error': 'User is not a resident'}), 400
         
-        vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=user.resident.id).first()
+        # Find vehicle belonging to this user (resident or owner)
+        vehicle = None
+        if user.resident:
+            vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=user.resident.id).first()
+        if not vehicle and user.owner:
+            vehicle = Vehicle.query.filter_by(id=vehicle_id, owner_id=user.owner.id).first()
+        
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
         

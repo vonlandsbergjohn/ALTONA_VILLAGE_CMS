@@ -147,6 +147,8 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated: !!user,
     isAdmin: user?.role === 'admin',
     isResident: user?.role === 'resident',
+    // Allow vehicle access for both residents and owners (including owner-only users)
+    canAccessVehicles: user && (user.is_resident || user.is_owner || user.resident || user.owner),
   };
 
   return (

@@ -17,7 +17,7 @@ import './App.css';
 
 // Simple router component
 const Router = () => {
-  const { user, loading, isAuthenticated, isAdmin, isResident } = useAuth();
+  const { user, loading, isAuthenticated, isAdmin, isResident, canAccessVehicles } = useAuth();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [showRegister, setShowRegister] = useState(false);
 
@@ -76,7 +76,7 @@ const Router = () => {
       if (isAdmin) {
         navigate('/admin');
         return <AdminDashboard />;
-      } else if (isResident) {
+      } else if (isResident || canAccessVehicles) {
         navigate('/resident');
         return <ResidentDashboard />;
       }
@@ -104,8 +104,8 @@ const Router = () => {
       }
     }
 
-    // Resident routes
-    if (isResident) {
+    // Resident and Owner routes
+    if (isResident || canAccessVehicles) {
       switch (currentPath) {
         case '/resident':
           return <ResidentDashboard />;
@@ -114,7 +114,11 @@ const Router = () => {
         case '/resident/property':
           return <MyProperty />;
         case '/resident/vehicles':
-          return <VehicleManagement />;
+          // Allow both residents and owners to access vehicles
+          if (canAccessVehicles) {
+            return <VehicleManagement />;
+          }
+          break;
         case '/resident/complaints':
           return <MyComplaints />;
         default:

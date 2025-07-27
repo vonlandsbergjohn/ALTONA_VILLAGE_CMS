@@ -247,7 +247,6 @@ def profile():
     elif user.is_resident():
         profile_data['tenant_or_owner'] = 'tenant'
     
-    print(f"[DEBUG] GET profile returning: {profile_data}")
     return jsonify(profile_data), 200
 
 @auth_bp.route('/profile', methods=['PUT'])
@@ -258,12 +257,9 @@ def update_profile():
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            print(f"[DEBUG] User not found: {user_id}")
             return jsonify({'error': 'User not found'}), 404
         
         data = request.get_json()
-        print(f"[DEBUG] Received profile update data: {data}")
-        print(f"[DEBUG] Intercom code in data: {data.get('intercom_code', 'NOT_FOUND')}")
         if not data:
             return jsonify({'error': 'No data received'}), 400
         
@@ -299,8 +295,6 @@ def update_profile():
             current_is_owner = user.owner is not None
             new_status = data['tenant_or_owner']
             
-            print(f"[DEBUG] Status change: current resident={current_is_resident}, owner={current_is_owner}, new_status={new_status}")
-            
             # Get name components for new records
             if 'first_name' in data and 'last_name' in data:
                 first_name = data['first_name']
@@ -317,9 +311,8 @@ def update_profile():
                     first_name = ''
                     last_name = ''
             
-            if new_status == 'tenant' and not current_is_resident:
+            if (new_status == 'tenant' or new_status == 'resident') and not current_is_resident:
                 # Create new resident record
-                print("[DEBUG] Creating new resident record")
                 resident = Resident(
                     user_id=user.id,
                     first_name=first_name,
@@ -338,12 +331,10 @@ def update_profile():
                 
                 # If was only owner, remove owner record
                 if current_is_owner:
-                    print("[DEBUG] Removing owner record")
                     db.session.delete(user.owner)
             
             elif new_status == 'owner' and not current_is_owner:
                 # Create new owner record
-                print("[DEBUG] Creating new owner record")
                 owner = Owner(
                     user_id=user.id,
                     first_name=first_name,
@@ -362,14 +353,11 @@ def update_profile():
                 
                 # If was only resident, remove resident record
                 if current_is_resident:
-                    print("[DEBUG] Removing resident record")
                     db.session.delete(user.resident)
             
             elif new_status == 'owner-resident':
                 # Ensure both records exist
-                print("[DEBUG] Creating owner-resident status")
                 if not current_is_resident:
-                    print("[DEBUG] Creating resident record for owner-resident")
                     resident = Resident(
                         user_id=user.id,
                         first_name=first_name,
@@ -387,7 +375,6 @@ def update_profile():
                     db.session.add(resident)
                 
                 if not current_is_owner:
-                    print("[DEBUG] Creating owner record for owner-resident")
                     owner = Owner(
                         user_id=user.id,
                         first_name=first_name,
@@ -446,9 +433,7 @@ def update_profile():
             
             # Update intercom code
             if 'intercom_code' in data:
-                print(f"[DEBUG] Updating resident intercom_code: {data['intercom_code']}")
                 resident.intercom_code = data['intercom_code']
-                print(f"[DEBUG] Resident intercom_code set to: {resident.intercom_code}")
             
             # Update timestamps
             from datetime import datetime
@@ -532,9 +517,7 @@ def update_profile():
             
             # Update intercom code
             if 'intercom_code' in data:
-                print(f"[DEBUG] Updating owner intercom_code: {data['intercom_code']}")
                 owner.intercom_code = data['intercom_code']
-                print(f"[DEBUG] Owner intercom_code set to: {owner.intercom_code}")
             
             # Update timestamps
             from datetime import datetime
@@ -551,7 +534,6 @@ def update_profile():
             'message': 'Profile updated successfully',
             'user': user.to_dict()
         }
-        print(f"[DEBUG] Sending response: {response_data}")
         return jsonify(response_data), 200
         
     except Exception as e:

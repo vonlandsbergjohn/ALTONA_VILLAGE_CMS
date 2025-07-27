@@ -18,7 +18,10 @@ const GateRegister = () => {
     vehiclesTotal: 0
   });
 
+  console.log('[DEBUG] GateRegister component mounted');
+
   useEffect(() => {
+    console.log('[DEBUG] GateRegister useEffect triggered');
     fetchGateRegister();
   }, []);
 
@@ -26,16 +29,20 @@ const GateRegister = () => {
     try {
       setLoading(true);
       setError('');
+      console.log('[DEBUG] Fetching gate register...');
       const response = await adminAPI.getGateRegister();
+      console.log('[DEBUG] Gate register response:', response);
       
       if (response.data.success) {
         setGateData(response.data.data);
         calculateStats(response.data.data);
+        console.log('[DEBUG] Gate register data loaded successfully');
       } else {
         setError('Failed to load gate register');
+        console.error('[DEBUG] Gate register failed:', response.data);
       }
     } catch (error) {
-      console.error('Error fetching gate register:', error);
+      console.error('[DEBUG] Error fetching gate register:', error);
       setError(error.response?.data?.error || 'Failed to load gate register');
     } finally {
       setLoading(false);
@@ -111,6 +118,21 @@ const GateRegister = () => {
       <div className="flex items-center justify-center p-8">
         <RefreshCw className="h-6 w-6 animate-spin mr-2" />
         Loading gate register...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center p-8">
+          <div className="text-red-600 text-lg font-semibold mb-2">Error Loading Gate Register</div>
+          <div className="text-gray-600 mb-4">{error}</div>
+          <Button onClick={fetchGateRegister} className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }

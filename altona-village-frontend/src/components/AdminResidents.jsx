@@ -133,9 +133,8 @@ const AdminResidents = () => {
         emergency_contact_name: selectedResident.emergency_contact_name,
         emergency_contact_phone: selectedResident.emergency_contact_number,
         property_address: selectedResident.full_address,
-        tenant_or_owner: selectedResident.is_owner ? 'owner' : 'tenant',
-        intercom_code: selectedResident.intercom_code,
-        resident_status_change: getResidentStatusValue(selectedResident)
+        tenant_or_owner: getResidentStatusValue(selectedResident),
+        intercom_code: selectedResident.intercom_code
       };
 
       console.log('Updating resident with data:', updateData);
@@ -160,15 +159,15 @@ const AdminResidents = () => {
   const getResidentStatusValue = (resident) => {
     if (resident.is_resident && resident.is_owner) return 'owner-resident';
     if (resident.is_owner) return 'owner';
-    if (resident.is_resident) return 'resident';
-    return 'resident'; // Default fallback
+    if (resident.is_resident) return 'tenant';
+    return 'tenant'; // Default fallback
   };
 
   const handleResidentStatusChange = (newStatus) => {
     const updates = { ...selectedResident };
     
     switch (newStatus) {
-      case 'resident':
+      case 'tenant':
         updates.is_resident = true;
         updates.is_owner = false;
         break;
@@ -249,12 +248,12 @@ const AdminResidents = () => {
 
   const handleAddVehicle = async (e) => {
     e.preventDefault();
-    if (!selectedResident?.id || !newVehicle.registration_number) return;
+    if (!selectedResident?.user_id || !newVehicle.registration_number) return;
 
     try {
       setVehicleLoading(true);
-      await adminAPI.addResidentVehicle(selectedResident.id, newVehicle);
-      await loadVehicles(selectedResident.id);
+      await adminAPI.addResidentVehicle(selectedResident.user_id, newVehicle);
+      await loadVehicles(selectedResident.user_id);
       setNewVehicle({ registration_number: '', make: '', model: '', color: '' });
       setMessage({ type: 'success', text: 'Vehicle added successfully' });
     } catch (error) {
@@ -269,12 +268,12 @@ const AdminResidents = () => {
   };
 
   const handleDeleteVehicle = async (vehicleId) => {
-    if (!selectedResident?.id || !confirm('Are you sure you want to delete this vehicle?')) return;
+    if (!selectedResident?.user_id || !confirm('Are you sure you want to delete this vehicle?')) return;
 
     try {
       setVehicleLoading(true);
-      await adminAPI.deleteResidentVehicle(selectedResident.id, vehicleId);
-      await loadVehicles(selectedResident.id);
+      await adminAPI.deleteResidentVehicle(selectedResident.user_id, vehicleId);
+      await loadVehicles(selectedResident.user_id);
       setMessage({ type: 'success', text: 'Vehicle deleted successfully' });
     } catch (error) {
       console.error('Error deleting vehicle:', error);
@@ -295,8 +294,8 @@ const AdminResidents = () => {
     setEditDialogOpen(true);
     setMessage({ type: '', text: '' });
     // Load vehicles if resident has an ID and is a resident
-    if (resident.id && resident.is_resident) {
-      loadVehicles(resident.id);
+    if (resident.user_id && resident.is_resident) {
+      loadVehicles(resident.user_id);
     }
     console.log('Dialog should be opening...');
   };
@@ -616,8 +615,8 @@ const AdminResidents = () => {
                     onChange={(e) => handleResidentStatusChange(e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-10 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   >
-                    <option value="resident">Resident Only</option>
-                    <option value="owner">Owner Only</option>
+                    <option value="tenant">Tenant</option>
+                    <option value="owner">Property Owner</option>
                     <option value="owner-resident">Owner-Resident</option>
                   </select>
                 </div>

@@ -182,6 +182,7 @@ class Owner(db.Model):
     
     # Owner-specific relationships
     owned_properties = db.relationship('Property', backref='owner', lazy=True)
+    vehicles = db.relationship('Vehicle', backref='owner', lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Owner {self.first_name} {self.last_name}>'
@@ -316,7 +317,8 @@ class Vehicle(db.Model):
     __tablename__ = 'vehicles'
     
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    resident_id = db.Column(db.String(36), db.ForeignKey('residents.id'), nullable=False)
+    resident_id = db.Column(db.String(36), db.ForeignKey('residents.id'), nullable=True)
+    owner_id = db.Column(db.String(36), db.ForeignKey('owners.id'), nullable=True)
     registration_number = db.Column(db.String(50), unique=True, nullable=False)
     make = db.Column(db.String(100))
     model = db.Column(db.String(100))
@@ -331,6 +333,7 @@ class Vehicle(db.Model):
         return {
             'id': self.id,
             'resident_id': self.resident_id,
+            'owner_id': self.owner_id,
             'registration_number': self.registration_number,
             'make': self.make,
             'model': self.model,
