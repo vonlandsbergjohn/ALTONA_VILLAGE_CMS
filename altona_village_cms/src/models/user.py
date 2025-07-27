@@ -59,6 +59,9 @@ class Resident(db.Model):
     phone_number = db.Column(db.String(20))
     emergency_contact_name = db.Column(db.String(255))
     emergency_contact_number = db.Column(db.String(20))
+    id_number = db.Column(db.String(50), nullable=False)  # Added missing field
+    erf_number = db.Column(db.String(50), nullable=False)  # Added missing field
+    address = db.Column(db.String(255), nullable=False)  # Added missing field
     is_owner = db.Column(db.Boolean, nullable=False)
     moving_in_date = db.Column(db.Date)
     moving_out_date = db.Column(db.Date)
@@ -82,6 +85,9 @@ class Resident(db.Model):
             'phone_number': self.phone_number,
             'emergency_contact_name': self.emergency_contact_name,
             'emergency_contact_number': self.emergency_contact_number,
+            'id_number': self.id_number,  # Added missing field
+            'erf_number': self.erf_number,  # Added missing field
+            'address': self.address,  # Added missing field
             'is_owner': self.is_owner,
             'moving_in_date': self.moving_in_date.isoformat() if self.moving_in_date else None,
             'moving_out_date': self.moving_out_date.isoformat() if self.moving_out_date else None,
