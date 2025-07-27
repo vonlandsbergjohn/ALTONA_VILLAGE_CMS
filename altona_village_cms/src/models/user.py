@@ -87,7 +87,12 @@ class Resident(db.Model):
     emergency_contact_number = db.Column(db.String(20))
     id_number = db.Column(db.String(50), nullable=False)
     erf_number = db.Column(db.String(50), nullable=False)
-    address = db.Column(db.String(255), nullable=False)
+    
+    # Separated address components for better sorting and gate access
+    street_number = db.Column(db.String(10), nullable=False)
+    street_name = db.Column(db.String(100), nullable=False)
+    full_address = db.Column(db.String(255), nullable=False)  # For display purposes
+    
     moving_in_date = db.Column(db.Date)
     moving_out_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -100,6 +105,21 @@ class Resident(db.Model):
 
     def __repr__(self):
         return f'<Resident {self.first_name} {self.last_name}>'
+    
+    @property
+    def display_address(self):
+        """Get formatted address for display"""
+        return f"{self.street_number} {self.street_name}"
+    
+    @property
+    def gate_access_info(self):
+        """Get formatted info for gate access register"""
+        return {
+            'name': f"{self.last_name}, {self.first_name}",
+            'address': f"{self.street_name} {self.street_number}",
+            'erf': self.erf_number,
+            'phone': self.phone_number
+        }
 
     def to_dict(self):
         return {
@@ -112,7 +132,11 @@ class Resident(db.Model):
             'emergency_contact_number': self.emergency_contact_number,
             'id_number': self.id_number,
             'erf_number': self.erf_number,
-            'address': self.address,
+            'street_number': self.street_number,
+            'street_name': self.street_name,
+            'full_address': self.full_address,
+            'display_address': self.display_address,
+            'gate_access_info': self.gate_access_info,
             'moving_in_date': self.moving_in_date.isoformat() if self.moving_in_date else None,
             'moving_out_date': self.moving_out_date.isoformat() if self.moving_out_date else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -129,12 +153,25 @@ class Owner(db.Model):
     phone_number = db.Column(db.String(20))
     id_number = db.Column(db.String(50), nullable=False)
     erf_number = db.Column(db.String(50), nullable=False)
-    address = db.Column(db.String(255), nullable=False)
+    
+    # Separated address components for better sorting
+    street_number = db.Column(db.String(10), nullable=False)
+    street_name = db.Column(db.String(100), nullable=False)
+    full_address = db.Column(db.String(255), nullable=False)  # For display purposes
+    
     # Owner-specific fields
     title_deed_number = db.Column(db.String(100))
     acquisition_date = db.Column(db.Date)
-    # Contact information for non-resident owners
-    postal_address = db.Column(db.String(255))
+    
+    # Separated postal address components for non-resident owners
+    postal_street_number = db.Column(db.String(10))
+    postal_street_name = db.Column(db.String(100))
+    postal_suburb = db.Column(db.String(100))
+    postal_city = db.Column(db.String(100))
+    postal_code = db.Column(db.String(10))
+    postal_province = db.Column(db.String(50))
+    full_postal_address = db.Column(db.String(500))  # Complete postal address
+    
     emergency_contact_name = db.Column(db.String(255))
     emergency_contact_number = db.Column(db.String(20))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -145,6 +182,42 @@ class Owner(db.Model):
 
     def __repr__(self):
         return f'<Owner {self.first_name} {self.last_name}>'
+    
+    @property
+    def display_address(self):
+        """Get formatted address for display"""
+        return f"{self.street_number} {self.street_name}"
+    
+    @property
+    def display_postal_address(self):
+        """Get formatted postal address for display"""
+        if self.full_postal_address:
+            return self.full_postal_address
+        
+        parts = []
+        if self.postal_street_number and self.postal_street_name:
+            parts.append(f"{self.postal_street_number} {self.postal_street_name}")
+        if self.postal_suburb:
+            parts.append(self.postal_suburb)
+        if self.postal_city:
+            parts.append(self.postal_city)
+        if self.postal_code:
+            parts.append(self.postal_code)
+        if self.postal_province:
+            parts.append(self.postal_province)
+        
+        return ", ".join(parts) if parts else None
+    
+    @property
+    def gate_access_info(self):
+        """Get formatted info for gate access register"""
+        return {
+            'name': f"{self.last_name}, {self.first_name}",
+            'address': f"{self.street_name} {self.street_number}",
+            'erf': self.erf_number,
+            'phone': self.phone_number,
+            'owner_type': 'Owner-Resident' if hasattr(self.user, 'resident') and self.user.resident else 'Non-Resident Owner'
+        }
 
     def to_dict(self):
         return {
@@ -155,10 +228,21 @@ class Owner(db.Model):
             'phone_number': self.phone_number,
             'id_number': self.id_number,
             'erf_number': self.erf_number,
-            'address': self.address,
+            'street_number': self.street_number,
+            'street_name': self.street_name,
+            'full_address': self.full_address,
+            'display_address': self.display_address,
             'title_deed_number': self.title_deed_number,
             'acquisition_date': self.acquisition_date.isoformat() if self.acquisition_date else None,
-            'postal_address': self.postal_address,
+            'postal_street_number': self.postal_street_number,
+            'postal_street_name': self.postal_street_name,
+            'postal_suburb': self.postal_suburb,
+            'postal_city': self.postal_city,
+            'postal_code': self.postal_code,
+            'postal_province': self.postal_province,
+            'full_postal_address': self.full_postal_address,
+            'display_postal_address': self.display_postal_address,
+            'gate_access_info': self.gate_access_info,
             'emergency_contact_name': self.emergency_contact_name,
             'emergency_contact_number': self.emergency_contact_number,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -170,13 +254,40 @@ class Property(db.Model):
     
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     erf_number = db.Column(db.String(50), unique=True, nullable=False)
-    address = db.Column(db.String(255), nullable=False)
+    
+    # Separated address components for better sorting and gate access
+    street_number = db.Column(db.String(10))
+    street_name = db.Column(db.String(100))
+    address = db.Column(db.String(255), nullable=False)  # Full address for display
+    
     # Updated to support both resident and owner relationships
     resident_id = db.Column(db.String(36), db.ForeignKey('residents.id'))
     owner_id = db.Column(db.String(36), db.ForeignKey('owners.id'))
     plot_registered_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    @property
+    def display_address(self):
+        """Get formatted address for display"""
+        if self.street_number and self.street_name:
+            return f"{self.street_number} {self.street_name}"
+        return self.address
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'erf_number': self.erf_number,
+            'street_number': self.street_number,
+            'street_name': self.street_name,
+            'address': self.address,
+            'display_address': self.display_address,
+            'resident_id': self.resident_id,
+            'owner_id': self.owner_id,
+            'plot_registered_date': self.plot_registered_date.isoformat() if self.plot_registered_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
     
     # Relationships
     builder = db.relationship('Builder', backref='property', uselist=False, cascade='all, delete-orphan')

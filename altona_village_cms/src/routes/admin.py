@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import text
 from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
 from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
@@ -584,53 +585,87 @@ def get_owner_residents():
 @admin_bp.route('/communication/groups-summary', methods=['GET'])
 @jwt_required()
 def get_groups_summary():
-    """Get summary of all communication groups"""
-    admin_check = admin_required()
-    if admin_check:
-        return admin_check
-    
+    """Get summary of all user groups"""
     try:
-        # Count different groups
-        residents_count = User.query.join(Resident).filter(User.status == 'active').count()
-        owners_count = User.query.join(Owner).filter(User.status == 'active').count()
-        non_resident_owners_count = User.query.join(Owner).outerjoin(Resident).filter(
-            User.status == 'active',
-            Resident.id == None
-        ).count()
-        owner_residents_count = User.query.join(Owner).join(Resident).filter(User.status == 'active').count()
+        # Get counts for all groups
+        residents_count = db.session.query(User).join(Resident).filter(User.status == 'active').count()
+        owners_count = db.session.query(User).join(Owner).filter(User.status == 'active').count()
+        owner_residents_count = db.session.query(User).join(Resident).join(Owner).filter(User.status == 'active').count()
+        non_resident_owners_count = owners_count - owner_residents_count
+        
+        # Get gate access register info
+        gate_register = db.session.execute(text("SELECT * FROM gate_access_register")).fetchall()
+        
+        summary = {
+            'total_residents': residents_count,
+            'total_owners': owners_count,
+            'owner_residents': owner_residents_count,
+            'non_resident_owners': non_resident_owners_count,
+            'gate_register_entries': len(gate_register),
+            'gate_register_sample': [
+                {
+                    'last_name': row[0],
+                    'first_name': row[1], 
+                    'street_name': row[2],
+                    'street_number': row[3],
+                    'erf_number': row[4],
+                    'phone_number': row[5],
+                    'email': row[6],
+                    'resident_type': row[7],
+                    'is_owner': row[8]
+                } for row in gate_register[:10]  # First 10 entries
+            ]
+        }
+        
+        return jsonify(summary), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/gate-access-register', methods=['GET'])
+@jwt_required()
+def get_gate_access_register():
+    """Get the complete gate access register sorted for security use"""
+    try:
+        # Query the gate access view
+        gate_register = db.session.execute(text("SELECT * FROM gate_access_register")).fetchall()
+        
+        register_data = [
+            {
+                'last_name': row[0],
+                'first_name': row[1],
+                'street_name': row[2],
+                'street_number': row[3],
+                'erf_number': row[4],
+                'phone_number': row[5],
+                'email': row[6],
+                'resident_type': row[7],
+                'is_owner': row[8],
+                'full_name': f"{row[1]} {row[0]}",  # First Last
+                'display_address': f"{row[2]} {row[3]}",  # Street Name + Number
+                'sortable_address': f"{row[2]}_{int(row[3]) if row[3].isdigit() else 999:03d}"  # For proper sorting
+            } for row in gate_register
+        ]
+        
+        # Sort options
+        sort_by = request.args.get('sort_by', 'street_name')  # Default sort by street name
+        sort_order = request.args.get('sort_order', 'asc')  # asc or desc
+        
+        if sort_by == 'street_name':
+            register_data.sort(key=lambda x: (x['street_name'], int(x['street_number']) if x['street_number'].isdigit() else 999))
+        elif sort_by == 'last_name':
+            register_data.sort(key=lambda x: x['last_name'])
+        elif sort_by == 'erf_number':
+            register_data.sort(key=lambda x: x['erf_number'])
+        
+        if sort_order == 'desc':
+            register_data.reverse()
         
         return jsonify({
-            'groups': [
-                {
-                    'id': 'residents',
-                    'name': 'All Residents',
-                    'description': 'All residents (including owner-residents)',
-                    'count': residents_count,
-                    'endpoint': '/api/admin/communication/residents-group'
-                },
-                {
-                    'id': 'owners', 
-                    'name': 'All Owners',
-                    'description': 'All owners (including owner-residents)',
-                    'count': owners_count,
-                    'endpoint': '/api/admin/communication/owners-group'
-                },
-                {
-                    'id': 'non-resident-owners',
-                    'name': 'Non-Resident Owners',
-                    'description': 'Owners who are not residents',
-                    'count': non_resident_owners_count,
-                    'endpoint': '/api/admin/communication/non-resident-owners'
-                },
-                {
-                    'id': 'owner-residents',
-                    'name': 'Owner-Residents',
-                    'description': 'Users who are both owners and residents',
-                    'count': owner_residents_count,
-                    'endpoint': '/api/admin/communication/owner-residents'
-                }
-            ],
-            'total_users': User.query.filter(User.status == 'active').count()
+            'register': register_data,
+            'total_entries': len(register_data),
+            'sorted_by': sort_by,
+            'sort_order': sort_order
         }), 200
         
     except Exception as e:
