@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MessageSquare, Plus, Calendar, Clock, AlertCircle, CheckCircle, XCircle, FileText } from 'lucide-react';
+import { MessageSquare, Plus, Calendar, Clock, AlertCircle, CheckCircle, XCircle, FileText, User } from 'lucide-react';
 
 const MyComplaints = () => {
   const [complaints, setComplaints] = useState([]);
@@ -31,9 +31,33 @@ const MyComplaints = () => {
 
   const fetchComplaints = async () => {
     try {
+      console.log('=== FETCHING MY COMPLAINTS ===');
       const response = await residentAPI.getMyComplaints();
-      setComplaints(response.data);
+      console.log('My complaints API response:', response);
+      console.log('My complaints data:', response.data);
+      
+      // Validate the data structure
+      if (Array.isArray(response.data)) {
+        console.log(`Found ${response.data.length} complaints`);
+        response.data.forEach((complaint, index) => {
+          console.log(`Complaint ${index + 1}:`, {
+            id: complaint.id,
+            subject: complaint.subject,
+            status: complaint.status,
+            updates_count: complaint.updates ? complaint.updates.length : 0
+          });
+        });
+        setComplaints(response.data);
+      } else {
+        console.error('Unexpected data format:', response.data);
+        setMessage({ type: 'error', text: 'Unexpected data format received' });
+      }
     } catch (error) {
+      console.error('=== FETCH MY COMPLAINTS ERROR ===');
+      console.error('Error:', error);
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
+      console.error('Error response status:', error.response?.status);
       setMessage({ type: 'error', text: 'Failed to load complaints' });
     } finally {
       setLoading(false);
@@ -72,9 +96,22 @@ const MyComplaints = () => {
 
   const viewComplaint = async (complaintId) => {
     try {
+      console.log('=== VIEWING COMPLAINT ===');
+      console.log('Complaint ID:', complaintId);
       const response = await residentAPI.getComplaint(complaintId);
-      setSelectedComplaint(response.data);
+      console.log('Individual complaint response:', response);
+      console.log('Individual complaint data:', response.data);
+      
+      if (response.data) {
+        setSelectedComplaint(response.data);
+      } else {
+        console.error('No complaint data received');
+        setMessage({ type: 'error', text: 'No complaint data received' });
+      }
     } catch (error) {
+      console.error('=== VIEW COMPLAINT ERROR ===');
+      console.error('Error:', error);
+      console.error('Error response:', error.response);
       setMessage({ type: 'error', text: 'Failed to load complaint details' });
     }
   };
@@ -134,17 +171,32 @@ const MyComplaints = () => {
   };
 
   const filterComplaints = (status) => {
-    if (status === 'all') return complaints;
-    return complaints.filter(complaint => 
-      complaint.status?.toLowerCase() === status.toLowerCase()
-    );
+    try {
+      if (!Array.isArray(complaints)) {
+        console.warn('Complaints is not an array:', complaints);
+        return [];
+      }
+      
+      if (status === 'all') return complaints;
+      return complaints.filter(complaint => {
+        if (!complaint.status) {
+          console.warn('Complaint without status:', complaint);
+          return false;
+        }
+        return complaint.status.toLowerCase() === status.toLowerCase();
+      });
+    } catch (error) {
+      console.error('Error in filterComplaints:', error);
+      return [];
+    }
   };
 
   const openComplaints = filterComplaints('open').length + filterComplaints('submitted').length + filterComplaints('in_progress').length + filterComplaints('assigned').length;
   const resolvedComplaints = filterComplaints('resolved').length + filterComplaints('completed').length;
   const closedComplaints = filterComplaints('closed').length;
+  const totalComplaints = Array.isArray(complaints) ? complaints.length : 0;
 
-  if (loading && complaints.length === 0) {
+  if (loading && totalComplaints === 0) {
     return (
       <div className="flex items-center justify-center py-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -305,7 +357,7 @@ const MyComplaints = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total</p>
-                <p className="text-2xl font-bold text-gray-900">{complaints.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{totalComplaints}</p>
               </div>
             </div>
           </CardContent>
@@ -325,7 +377,7 @@ const MyComplaints = () => {
         <CardContent>
           <Tabs defaultValue="all" className="space-y-4">
             <TabsList>
-              <TabsTrigger value="all">All ({complaints.length})</TabsTrigger>
+              <TabsTrigger value="all">All ({totalComplaints})</TabsTrigger>
               <TabsTrigger value="open">Open ({openComplaints})</TabsTrigger>
               <TabsTrigger value="resolved">Resolved ({resolvedComplaints})</TabsTrigger>
               <TabsTrigger value="closed">Closed ({closedComplaints})</TabsTrigger>
@@ -373,6 +425,32 @@ const MyComplaints = () => {
                               <div className="text-sm text-gray-500 truncate max-w-xs">
                                 {complaint.description}
                               </div>
+                              {/* Show indicator if there are admin updates */}
+                              {complaint.updates && Array.isArray(complaint.updates) && complaint.updates.length > 0 && (
+                                <div className="flex items-center mt-1">
+                                  <div className="w-2 h-2 bg-blue-500 rounded-full mr-1 animate-pulse"></div>
+                                  <span className="text-xs text-blue-600 font-medium">
+                                    {complaint.updates.length} admin update{complaint.updates.length > 1 ? 's' : ''}
+                                  </span>
+                                  {/* Show "NEW" badge if there's a recent update (within 24 hours) */}
+                                  {complaint.updates.some(update => {
+                                    try {
+                                      if (!update.created_at) return false;
+                                      const updateTime = new Date(update.created_at);
+                                      const now = new Date();
+                                      const hoursDiff = (now - updateTime) / (1000 * 60 * 60);
+                                      return hoursDiff <= 24;
+                                    } catch (e) {
+                                      console.warn('Error checking update time:', e);
+                                      return false;
+                                    }
+                                  }) && (
+                                    <Badge className="ml-1 bg-red-100 text-red-700 text-xs px-1 py-0">
+                                      NEW
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -405,11 +483,19 @@ const MyComplaints = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
-                              variant="outline"
+                              variant={complaint.updates && Array.isArray(complaint.updates) && complaint.updates.length > 0 ? "default" : "outline"}
                               size="sm"
                               onClick={() => viewComplaint(complaint.id)}
+                              className={complaint.updates && Array.isArray(complaint.updates) && complaint.updates.length > 0 ? "bg-blue-600 hover:bg-blue-700" : ""}
                             >
-                              View Details
+                              {complaint.updates && Array.isArray(complaint.updates) && complaint.updates.length > 0 ? (
+                                <>
+                                  <MessageSquare className="w-3 h-3 mr-1" />
+                                  View Updates
+                                </>
+                              ) : (
+                                "View Details"
+                              )}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -473,7 +559,83 @@ const MyComplaints = () => {
                   {selectedComplaint.created_at ? new Date(selectedComplaint.created_at).toLocaleString() : 'N/A'}
                 </p>
               </div>
-              {selectedComplaint.admin_response && (
+              {selectedComplaint.assigned_to && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Assigned To</Label>
+                  <p className="text-sm">{selectedComplaint.assigned_to}</p>
+                </div>
+              )}
+
+              {/* Admin Updates Section */}
+              {selectedComplaint.updates && Array.isArray(selectedComplaint.updates) && selectedComplaint.updates.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium text-gray-500">Admin Updates & Communication</Label>
+                    <Badge className="bg-blue-100 text-blue-800 text-xs">
+                      {selectedComplaint.updates.length} update{selectedComplaint.updates.length > 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
+                    {selectedComplaint.updates
+                      .sort((a, b) => {
+                        try {
+                          return new Date(b.created_at) - new Date(a.created_at); // Sort newest first
+                        } catch (e) {
+                          console.warn('Error sorting updates:', e);
+                          return 0;
+                        }
+                      })
+                      .map((update, index) => (
+                      <div key={update.id || index} className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded-r-md">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center">
+                            <div className="p-1 bg-blue-100 rounded-full mr-2">
+                              <User className="w-3 h-3 text-blue-600" />
+                            </div>
+                            <span className="text-xs font-medium text-blue-800">
+                              {update.admin_name || 'Admin'} 
+                              {update.admin_role && ` (${update.admin_role.charAt(0).toUpperCase() + update.admin_role.slice(1)})`}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            {/* Show "NEW" indicator if update is within 24 hours */}
+                            {(() => {
+                              try {
+                                if (!update.created_at) return false;
+                                const updateTime = new Date(update.created_at);
+                                const now = new Date();
+                                const hoursDiff = (now - updateTime) / (1000 * 60 * 60);
+                                return hoursDiff <= 24;
+                              } catch (e) {
+                                console.warn('Error checking update time:', e);
+                                return false;
+                              }
+                            })() && (
+                              <Badge className="mr-2 bg-red-100 text-red-700 text-xs px-1 py-0">
+                                NEW
+                              </Badge>
+                            )}
+                            <span className="text-xs text-blue-600">
+                              {update.created_at ? (() => {
+                                try {
+                                  return new Date(update.created_at).toLocaleString();
+                                } catch (e) {
+                                  console.warn('Error formatting date:', e);
+                                  return 'N/A';
+                                }
+                              })() : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{update.update_text || 'No message'}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Legacy admin_response field for backward compatibility */}
+              {selectedComplaint.admin_response && !selectedComplaint.updates?.length && (
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Admin Response</Label>
                   <div className="bg-blue-50 p-3 rounded-md">

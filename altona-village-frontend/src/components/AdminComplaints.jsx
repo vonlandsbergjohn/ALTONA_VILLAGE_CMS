@@ -30,11 +30,16 @@ const AdminComplaints = () => {
 
   const fetchComplaints = async () => {
     try {
+      console.log('=== FETCHING COMPLAINTS ===');
       const response = await adminAPI.getAllComplaints();
+      console.log('Complaints API response:', response);
+      console.log('Complaints data:', response.data);
       setComplaints(response.data);
     } catch (error) {
+      console.error('=== FETCH COMPLAINTS ERROR ===');
+      console.error('Error:', error);
+      console.error('Error response:', error.response);
       setMessage({ type: 'error', text: 'Failed to load complaints' });
-      console.error('Error fetching complaints:', error);
     } finally {
       setLoading(false);
     }
@@ -46,16 +51,44 @@ const AdminComplaints = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      await adminAPI.updateComplaint(selectedComplaint.id, updateData);
+      console.log('=== COMPLAINT UPDATE DEBUG ===');
+      console.log('Selected complaint:', selectedComplaint);
+      console.log('Selected complaint ID:', selectedComplaint.id);
+      console.log('Update data before formatting:', updateData);
+      
+      // Format data to match backend expectations
+      const payload = {
+        status: updateData.status,
+        assigned_to: updateData.assigned_to
+      };
+      
+      // Add update_text if response is provided
+      if (updateData.response && updateData.response.trim()) {
+        payload.update_text = updateData.response;
+      }
+
+      console.log('Final payload being sent:', payload);
+      console.log('Making API call to update complaint ID:', selectedComplaint.id);
+
+      const response = await adminAPI.updateComplaint(selectedComplaint.id, payload);
+      console.log('API response:', response);
+      
       setMessage({ type: 'success', text: 'Complaint updated successfully' });
       await fetchComplaints();
       setIsUpdateDialogOpen(false);
       setSelectedComplaint(null);
       setUpdateData({ status: '', response: '', assigned_to: '' });
     } catch (error) {
+      console.error('=== COMPLAINT UPDATE ERROR ===');
+      console.error('Error object:', error);
+      console.error('Error response:', error.response);
+      console.error('Error response data:', error.response?.data);
+      console.error('Error response status:', error.response?.status);
+      console.error('Error message:', error.message);
+      
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.message || 'Failed to update complaint' 
+        text: error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to update complaint' 
       });
     } finally {
       setLoading(false);
@@ -63,6 +96,11 @@ const AdminComplaints = () => {
   };
 
   const openUpdateDialog = (complaint) => {
+    console.log('=== OPENING UPDATE DIALOG ===');
+    console.log('Complaint selected:', complaint);
+    console.log('Complaint ID:', complaint.id);
+    console.log('Complaint status:', complaint.status);
+    
     setSelectedComplaint(complaint);
     setUpdateData({
       status: complaint.status || '',
@@ -299,8 +337,8 @@ const AdminComplaints = () => {
                               <div className="flex items-center">
                                 <User className="w-4 h-4 mr-2 text-gray-400" />
                                 <div>
-                                  <div className="font-medium">{complaint.resident_name || 'Unknown'}</div>
-                                  <div className="text-sm text-gray-500">{complaint.resident_email || ''}</div>
+                                  <div className="font-medium">{complaint.resident?.first_name} {complaint.resident?.last_name}</div>
+                                  <div className="text-sm text-gray-500">{complaint.resident?.email || ''}</div>
                                 </div>
                               </div>
                             </TableCell>
@@ -352,7 +390,7 @@ const AdminComplaints = () => {
                   <div><strong>Category:</strong> {selectedComplaint.category}</div>
                   <div><strong>Priority:</strong> {selectedComplaint.priority}</div>
                   <div><strong>Description:</strong> {selectedComplaint.description}</div>
-                  <div><strong>Resident:</strong> {selectedComplaint.resident_name} ({selectedComplaint.resident_email})</div>
+                  <div><strong>Resident:</strong> {selectedComplaint.resident?.first_name} {selectedComplaint.resident?.last_name} ({selectedComplaint.resident?.email})</div>
                   <div><strong>Submitted:</strong> {selectedComplaint.created_at ? new Date(selectedComplaint.created_at).toLocaleDateString() : 'N/A'}</div>
                 </div>
               </div>

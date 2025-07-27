@@ -123,9 +123,18 @@ def get_my_complaints():
         for complaint in resident.complaints:
             complaint_data = complaint.to_dict()
             
-            # Add updates
+            # Add updates with user information
             if complaint.updates:
-                complaint_data['updates'] = [update.to_dict() for update in complaint.updates]
+                updates_with_user = []
+                for update in complaint.updates:
+                    update_data = update.to_dict()
+                    # Get the user who made the update (admin)
+                    update_user = User.query.get(update.user_id)
+                    if update_user:
+                        update_data['admin_name'] = update_user.get_full_name()
+                        update_data['admin_role'] = update_user.role
+                    updates_with_user.append(update_data)
+                complaint_data['updates'] = updates_with_user
             
             complaints.append(complaint_data)
         
@@ -174,9 +183,18 @@ def get_complaint(complaint_id):
         
         complaint_data = complaint.to_dict()
         
-        # Add updates
+        # Add updates with user information
         if complaint.updates:
-            complaint_data['updates'] = [update.to_dict() for update in complaint.updates]
+            updates_with_user = []
+            for update in complaint.updates:
+                update_data = update.to_dict()
+                # Get the user who made the update (admin)
+                update_user = User.query.get(update.user_id)
+                if update_user:
+                    update_data['admin_name'] = update_user.get_full_name()
+                    update_data['admin_role'] = update_user.role
+                updates_with_user.append(update_data)
+            complaint_data['updates'] = updates_with_user
         
         return jsonify(complaint_data), 200
         

@@ -296,30 +296,46 @@ def get_all_complaints():
 @admin_bp.route('/complaints/<complaint_id>/update', methods=['POST'])
 @jwt_required()
 def update_complaint(complaint_id):
+    print(f'=== COMPLAINT UPDATE BACKEND DEBUG ===')
+    print(f'Complaint ID received: {complaint_id}')
+    print(f'Complaint ID type: {type(complaint_id)}')
+    print(f'Request data: {request.get_json()}')
+    
     admin_check = admin_required()
     if admin_check:
+        print('Admin check failed')
         return admin_check
     
     try:
         user_id = get_jwt_identity()
         data = request.get_json()
+        print(f'User ID: {user_id}')
+        print(f'Request data parsed: {data}')
         
         complaint = Complaint.query.get(complaint_id)
+        print(f'Complaint found: {complaint}')
         if not complaint:
+            print('Complaint not found in database')
             return jsonify({'error': 'Complaint not found'}), 404
+        
+        print(f'Current complaint status: {complaint.status}')
         
         # Update complaint status if provided
         if 'status' in data:
+            print(f'Updating status from {complaint.status} to {data["status"]}')
             complaint.status = data['status']
         
         if 'priority' in data:
+            print(f'Updating priority to {data["priority"]}')
             complaint.priority = data['priority']
         
         if 'assigned_to' in data:
+            print(f'Updating assigned_to to {data["assigned_to"]}')
             complaint.assigned_to = data['assigned_to']
         
         # Add update if provided
         if 'update_text' in data:
+            print(f'Adding update text: {data["update_text"]}')
             update = ComplaintUpdate(
                 complaint_id=complaint_id,
                 user_id=user_id,
@@ -327,11 +343,17 @@ def update_complaint(complaint_id):
             )
             db.session.add(update)
         
+        print('Committing changes to database')
         db.session.commit()
+        print('Changes committed successfully')
         
         return jsonify({'message': 'Complaint updated successfully'}), 200
         
     except Exception as e:
+        print(f'Exception occurred: {str(e)}')
+        print(f'Exception type: {type(e)}')
+        import traceback
+        traceback.print_exc()
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
