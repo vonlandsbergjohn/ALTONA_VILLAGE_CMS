@@ -172,6 +172,7 @@ def profile():
     elif user.is_resident():
         profile_data['tenant_or_owner'] = 'tenant'
     
+    print(f"[DEBUG] GET profile returning: {profile_data}")
     return jsonify(profile_data), 200
 
 @auth_bp.route('/profile', methods=['PUT'])
@@ -182,9 +183,11 @@ def update_profile():
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
+            print(f"[DEBUG] User not found: {user_id}")
             return jsonify({'error': 'User not found'}), 404
         
         data = request.get_json()
+        print(f"[DEBUG] Received profile update data: {data}")
         if not data:
             return jsonify({'error': 'No data received'}), 400
         
@@ -345,10 +348,12 @@ def update_profile():
         # Commit all changes
         db.session.commit()
         
-        return jsonify({
+        response_data = {
             'message': 'Profile updated successfully',
             'user': user.to_dict()
-        }), 200
+        }
+        print(f"[DEBUG] Sending response: {response_data}")
+        return jsonify(response_data), 200
         
     except Exception as e:
         db.session.rollback()

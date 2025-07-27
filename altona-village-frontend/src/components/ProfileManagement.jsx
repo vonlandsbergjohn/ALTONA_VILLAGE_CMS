@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { User, Mail, Phone, Shield, Calendar, MapPin } from 'lucide-react';
 
 const ProfileManagement = () => {
-  const { user, updateUser } = useAuth();
+  const { user, updateProfile: updateUserProfile } = useAuth();
   const [profile, setProfile] = useState({
     full_name: '',
     email: '',
@@ -36,9 +36,14 @@ const ProfileManagement = () => {
 
   const fetchProfile = async () => {
     try {
+      console.log('=== INITIAL PROFILE FETCH ===');
       const response = await authAPI.getProfile();
+      console.log('Initial profile response:', response);
+      console.log('Initial profile data:', response.data);
       setProfile(response.data);
     } catch (error) {
+      console.error('=== INITIAL PROFILE FETCH ERROR ===');
+      console.error('Error:', error);
       setMessage({ type: 'error', text: 'Failed to load profile information' });
     }
   };
@@ -49,14 +54,55 @@ const ProfileManagement = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      const response = await authAPI.updateProfile(profile);
-      setMessage({ type: 'success', text: response.data.message || 'Profile updated successfully' });
-      updateUser(response.data.user); // Update auth context with user data
-      setProfile(response.data.user); // Update local profile state
+      console.log('=== PROFILE UPDATE START ===');
+      console.log('Sending profile update:', profile);
+      console.log('API call starting...');
+      
+      const result = await updateUserProfile(profile);
+      
+      console.log('=== AUTH CONTEXT RESPONSE ===');
+      console.log('Update result:', result);
+      
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Profile updated successfully' });
+        
+        // Refresh the profile form data from the server
+        try {
+          console.log('=== ATTEMPTING TO REFRESH PROFILE ===');
+          const response = await authAPI.getProfile();
+          console.log('=== REFRESHED PROFILE DATA ===');
+          console.log('Full response:', response);
+          console.log('Response status:', response.status);
+          console.log('Response data:', response.data);
+          console.log('Response data type:', typeof response.data);
+          
+          if (response.data) {
+            setProfile(response.data);
+            console.log('=== PROFILE STATE UPDATED ===');
+          } else {
+            console.log('=== NO DATA IN RESPONSE ===');
+          }
+        } catch (refreshError) {
+          console.error('=== REFRESH ERROR ===');
+          console.error('Failed to refresh profile data:', refreshError);
+          console.error('Error response:', refreshError.response);
+          console.error('Error status:', refreshError.response?.status);
+          console.error('Error data:', refreshError.response?.data);
+          // Still show success since the update worked
+        }
+        
+        console.log('=== PROFILE UPDATE SUCCESS ===');
+      } else {
+        throw new Error(result.error);
+      }
     } catch (error) {
+      console.log('=== PROFILE UPDATE ERROR ===');
+      console.error('Profile update error:', error);
+      console.error('Error message:', error.message);
+      
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.error || 'Failed to update profile' 
+        text: error.message || 'Failed to update profile' 
       });
     } finally {
       setLoading(false);
@@ -81,20 +127,25 @@ const ProfileManagement = () => {
     }
 
     try {
-      const response = await authAPI.updateProfile({
+      const result = await updateUserProfile({
         current_password: passwords.current_password,
         password: passwords.new_password // Change key to 'password' to match backend
       });
-      setMessage({ type: 'success', text: response.data.message || 'Password changed successfully' });
-      setPasswords({
-        current_password: '',
-        new_password: '',
-        confirm_password: ''
-      });
+      
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Password changed successfully' });
+        setPasswords({
+          current_password: '',
+          new_password: '',
+          confirm_password: ''
+        });
+      } else {
+        throw new Error(result.error);
+      }
     } catch (error) {
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.error || 'Failed to change password' 
+        text: error.message || 'Failed to change password' 
       });
     } finally {
       setLoading(false);
