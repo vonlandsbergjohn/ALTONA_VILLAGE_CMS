@@ -4,6 +4,43 @@ from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
 from datetime import timedelta
 
+def parse_address(address):
+    """Parse address to extract street number and street name"""
+    if not address:
+        return "", ""
+    
+    # Remove common suffixes that shouldn't be in the basic address
+    address = address.replace("Altona Village", "").replace("Worcester", "").strip()
+    
+    # Try to find number at the beginning
+    parts = address.split()
+    street_number = ""
+    street_name = ""
+    
+    if parts:
+        # Check if first part is a number
+        if parts[0].isdigit():
+            street_number = parts[0]
+            street_name = " ".join(parts[1:]).strip()
+        else:
+            # Check if last part is a number
+            if parts[-1].isdigit():
+                street_number = parts[-1]
+                street_name = " ".join(parts[:-1]).strip()
+            else:
+                # Look for number in middle or extract first number found
+                for i, part in enumerate(parts):
+                    if part.isdigit():
+                        street_number = part
+                        street_name = " ".join(parts[:i] + parts[i+1:]).strip()
+                        break
+                
+                # If no number found, use entire address as street name
+                if not street_number:
+                    street_name = address
+    
+    return street_number or "", street_name or address
+
 auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/register', methods=['POST'])
@@ -14,11 +51,15 @@ def register():
         # Validate required fields
         required_fields = [
             'email', 'password', 'first_name', 'last_name', 'id_number',
-            'erf_number', 'address', 'is_owner', 'is_resident'
+            'erf_number', 'is_owner', 'is_resident'
         ]
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'{field} is required'}), 400
+        
+        # Validate address fields - either combined address OR separate components
+        if not (data.get('address') or (data.get('street_number') and data.get('street_name'))):
+            return jsonify({'error': 'Address information is required (either address or street_number + street_name)'}), 400
         
         # Check if user already exists
         if User.query.filter_by(email=data['email']).first():
@@ -36,6 +77,17 @@ def register():
 
         # Create Resident if checked
         if data['is_resident']:
+            # Handle separate address components or parse combined address
+            if 'street_number' in data and 'street_name' in data:
+                # Use separate fields if provided
+                street_number = data['street_number']
+                street_name = data['street_name']
+                full_address = f"{street_number} {street_name}".strip()
+            else:
+                # Parse combined address for backward compatibility
+                street_number, street_name = parse_address(data['address'])
+                full_address = data['address']
+            
             resident = Resident(
                 user_id=user.id,
                 first_name=data['first_name'],
@@ -45,12 +97,25 @@ def register():
                 emergency_contact_number=data.get('emergency_contact_number'),
                 id_number=data['id_number'],
                 erf_number=data['erf_number'],
-                address=data['address']
+                street_number=street_number,
+                street_name=street_name,
+                full_address=full_address
             )
             db.session.add(resident)
 
         # Create Owner if checked
         if data['is_owner']:
+            # Handle separate address components or parse combined address
+            if 'street_number' in data and 'street_name' in data:
+                # Use separate fields if provided
+                street_number = data['street_number']
+                street_name = data['street_name']
+                full_address = f"{street_number} {street_name}".strip()
+            else:
+                # Parse combined address for backward compatibility
+                street_number, street_name = parse_address(data['address'])
+                full_address = data['address']
+            
             owner = Owner(
                 user_id=user.id,
                 first_name=data['first_name'],
@@ -60,8 +125,10 @@ def register():
                 emergency_contact_number=data.get('emergency_contact_number'),
                 id_number=data['id_number'],
                 erf_number=data['erf_number'],
-                address=data['address'],
-                postal_address=data.get('postal_address'),
+                street_number=street_number,
+                street_name=street_name,
+                full_address=full_address,
+                full_postal_address=data.get('postal_address'),
                 title_deed_number=data.get('title_deed_number')
             )
             db.session.add(owner)

@@ -20,7 +20,8 @@ const RegisterForm = ({ onSwitchToLogin }) => {
     emergency_contact_number: '',
     id_number: '',
     erf_number: '',
-    address: '',
+    street_number: '',
+    street_name: '',
     is_owner: false,
     is_resident: false, // NEW
   });
@@ -49,8 +50,22 @@ const RegisterForm = ({ onSwitchToLogin }) => {
       return;
     }
 
-    const { confirmPassword, ...submitData } = formData;
-    const result = await register(submitData);
+    // Combine street_number and street_name into address for backend compatibility
+    const { confirmPassword, street_number, street_name, ...submitData } = formData;
+    const combinedAddress = `${street_number} ${street_name}`.trim();
+    
+    if (!combinedAddress) {
+      setError('Please enter both street number and street name');
+      setLoading(false);
+      return;
+    }
+    
+    const finalSubmitData = {
+      ...submitData,
+      address: combinedAddress
+    };
+
+    const result = await register(finalSubmitData);
 
     if (result.success) {
       setSuccess(true);
@@ -163,16 +178,29 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="address">Address in Altona Village</Label>
-              <Input
-                id="address"
-                name="address"
-                value={formData.address}
-                onChange={handleChange}
-                placeholder="e.g. 10 Main Street"
-                required
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="street_number">Street Number</Label>
+                <Input
+                  id="street_number"
+                  name="street_number"
+                  value={formData.street_number}
+                  onChange={handleChange}
+                  placeholder="e.g. 10"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="street_name">Street Name</Label>
+                <Input
+                  id="street_name"
+                  name="street_name"
+                  value={formData.street_name}
+                  onChange={handleChange}
+                  placeholder="e.g. Main Street"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

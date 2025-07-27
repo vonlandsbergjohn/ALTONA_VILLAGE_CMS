@@ -46,6 +46,7 @@ export const adminAPI = {
   approveRegistration: (userId) => api.post(`/admin/approve-registration/${userId}`),
   rejectRegistration: (userId) => api.post(`/admin/reject-registration/${userId}`),
   getAllResidents: () => api.get('/admin/residents'),
+  updateResident: (userId, data) => api.put(`/admin/residents/${userId}`, data),
   getAllProperties: () => api.get('/admin/properties'),
   createProperty: (data) => api.post('/admin/properties', data),
   createBuilder: (data) => api.post('/admin/builders', data),

@@ -124,26 +124,154 @@ def get_all_residents():
         return admin_check
     
     try:
-        residents = Resident.query.all()
+        # Get all users with either resident or owner records
+        users = User.query.filter(
+            (User.resident.has()) | (User.owner.has())
+        ).all()
+        
         result = []
         
-        for resident in residents:
-            resident_data = resident.to_dict()
-            resident_data['user'] = resident.user.to_dict()
+        for user in users:
+            # Start with user data
+            user_data = {
+                'user_id': user.id,
+                'email': user.email,
+                'status': user.status,
+                'created_at': user.created_at.isoformat() if user.created_at else None,
+                'is_resident': user.resident is not None,
+                'is_owner': user.owner is not None,
+            }
             
-            # Add property information
-            if resident.properties:
-                resident_data['properties'] = [prop.to_dict() for prop in resident.properties]
+            # Add resident data if available
+            if user.resident:
+                resident = user.resident
+                user_data.update({
+                    'id': resident.id,
+                    'first_name': resident.first_name,
+                    'last_name': resident.last_name,
+                    'phone_number': resident.phone_number,
+                    'emergency_contact_name': resident.emergency_contact_name,
+                    'emergency_contact_number': resident.emergency_contact_number,
+                    'id_number': resident.id_number,
+                    'erf_number': resident.erf_number,
+                    'street_number': resident.street_number,
+                    'street_name': resident.street_name,
+                    'full_address': resident.full_address,
+                })
             
-            # Add vehicle information
-            if resident.vehicles:
-                resident_data['vehicles'] = [vehicle.to_dict() for vehicle in resident.vehicles]
+            # Add owner data if available (and no resident data)
+            elif user.owner:
+                owner = user.owner
+                user_data.update({
+                    'id': owner.id,
+                    'first_name': owner.first_name,
+                    'last_name': owner.last_name,
+                    'phone_number': owner.phone_number,
+                    'emergency_contact_name': owner.emergency_contact_name,
+                    'emergency_contact_number': owner.emergency_contact_number,
+                    'id_number': owner.id_number,
+                    'erf_number': owner.erf_number,
+                    'street_number': owner.street_number,
+                    'street_name': owner.street_name,
+                    'full_address': owner.full_address,
+                })
             
-            result.append(resident_data)
+            result.append(user_data)
         
         return jsonify(result), 200
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/residents/<user_id>', methods=['PUT'])
+@jwt_required()
+def update_resident(user_id):
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Find the user
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Update user basic info
+        if 'email' in data:
+            # Check if email is already in use by another user
+            existing_user = User.query.filter(User.email == data['email'], User.id != user_id).first()
+            if existing_user:
+                return jsonify({'error': 'Email already in use'}), 400
+            user.email = data['email']
+        
+        # Update resident information if user has resident record
+        if user.resident:
+            resident = user.resident
+            
+            if 'full_name' in data:
+                # Split full name into first and last name
+                names = data['full_name'].strip().split(' ', 1)
+                resident.first_name = names[0]
+                resident.last_name = names[1] if len(names) > 1 else ''
+            
+            if 'phone' in data:
+                resident.phone_number = data['phone']
+            
+            if 'emergency_contact_name' in data:
+                resident.emergency_contact_name = data['emergency_contact_name']
+            
+            if 'emergency_contact_phone' in data:
+                resident.emergency_contact_number = data['emergency_contact_phone']
+            
+            if 'property_address' in data:
+                # Parse the address and update components
+                from src.routes.auth import parse_address
+                street_number, street_name = parse_address(data['property_address'])
+                resident.street_number = street_number
+                resident.street_name = street_name
+                resident.full_address = data['property_address']
+        
+        # Update owner information if user has owner record
+        if user.owner:
+            owner = user.owner
+            
+            if 'full_name' in data:
+                # Split full name into first and last name
+                names = data['full_name'].strip().split(' ', 1)
+                owner.first_name = names[0]
+                owner.last_name = names[1] if len(names) > 1 else ''
+            
+            if 'phone' in data:
+                owner.phone_number = data['phone']
+            
+            if 'emergency_contact_name' in data:
+                owner.emergency_contact_name = data['emergency_contact_name']
+            
+            if 'emergency_contact_phone' in data:
+                owner.emergency_contact_number = data['emergency_contact_phone']
+            
+            if 'property_address' in data:
+                # Parse the address and update components
+                from src.routes.auth import parse_address
+                street_number, street_name = parse_address(data['property_address'])
+                owner.street_number = street_number
+                owner.street_name = street_name
+                owner.full_address = data['property_address']
+        
+        user.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Resident updated successfully',
+            'user': user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 @admin_bp.route('/properties', methods=['GET'])
