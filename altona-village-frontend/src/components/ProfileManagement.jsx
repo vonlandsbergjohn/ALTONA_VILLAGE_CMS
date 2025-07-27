@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { User, Mail, Phone, Shield, Calendar, MapPin, KeyRound } from 'lucide-react';
 
 const ProfileManagement = () => {
-  const { user, updateProfile: updateUserProfile } = useAuth();
+  const { user, updateProfile: updateUserProfile, refreshUser } = useAuth();
   const [profile, setProfile] = useState({
     full_name: '',
     email: '',
@@ -80,6 +80,9 @@ const ProfileManagement = () => {
           if (response.data) {
             setProfile(response.data);
             console.log('=== PROFILE STATE UPDATED ===');
+            
+            // Also refresh the user context
+            await refreshUser();
           } else {
             console.log('=== NO DATA IN RESPONSE ===');
           }
