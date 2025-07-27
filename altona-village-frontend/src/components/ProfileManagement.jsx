@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/auth.jsx';
+import { useAuth, getUserResidencyType } from '@/lib/auth.jsx';
 import { authAPI } from '@/lib/api.js';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,9 +154,14 @@ const ProfileManagement = () => {
   };
 
   const getRoleColor = (role) => {
-    switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800';
-      case 'resident': return 'bg-green-100 text-green-800';
+    // Get the actual residency type for coloring
+    const residencyType = getUserResidencyType(user);
+    
+    switch (residencyType) {
+      case 'Admin': return 'bg-red-100 text-red-800';
+      case 'Property Owner': return 'bg-blue-100 text-blue-800';
+      case 'Resident': return 'bg-green-100 text-green-800';
+      case 'Owner-Resident': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -180,7 +185,7 @@ const ProfileManagement = () => {
         <div className="flex items-center space-x-2">
           <Badge className={getRoleColor(user?.role)}>
             <Shield className="w-3 h-3 mr-1" />
-            {user?.role?.toUpperCase()}
+            {getUserResidencyType(user)}
           </Badge>
           <Badge className={getStatusColor(user?.status)}>
             {user?.status?.toUpperCase()}
@@ -268,6 +273,7 @@ const ProfileManagement = () => {
                       <option value="">Select type</option>
                       <option value="owner">Property Owner</option>
                       <option value="tenant">Tenant</option>
+                      <option value="owner-resident">Owner-Resident</option>
                     </select>
                   </div>
                 </div>

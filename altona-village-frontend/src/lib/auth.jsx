@@ -11,6 +11,19 @@ export const useAuth = () => {
   return context;
 };
 
+// Helper function to get user's actual residency type
+export const getUserResidencyType = (user) => {
+  if (!user) return 'Unknown';
+  
+  const isResident = user.is_resident;
+  const isOwner = user.is_owner;
+  
+  if (isResident && isOwner) return 'Owner-Resident';
+  if (isOwner) return 'Property Owner';
+  if (isResident) return 'Resident';
+  return user.role === 'admin' ? 'Admin' : 'Unknown';
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);

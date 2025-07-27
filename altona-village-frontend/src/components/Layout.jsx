@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '@/lib/auth.jsx';
+import { useAuth, getUserResidencyType } from '@/lib/auth.jsx';
 import { Button } from '@/components/ui/button';
 import { 
   Home, 
@@ -90,7 +90,7 @@ const Layout = ({ children }) => {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium text-gray-900">{user?.email}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+              <p className="text-xs text-gray-500">{getUserResidencyType(user)}</p>
             </div>
           </div>
           <Button

@@ -236,7 +236,7 @@ def profile():
     
     # Determine tenant_or_owner status
     if user.is_owner() and user.is_resident():
-        profile_data['tenant_or_owner'] = 'owner'  # Owner-resident defaults to owner
+        profile_data['tenant_or_owner'] = 'owner-resident'  # Show owner-resident when user has both
     elif user.is_owner():
         profile_data['tenant_or_owner'] = 'owner'
     elif user.is_resident():
@@ -359,6 +359,45 @@ def update_profile():
                 if current_is_resident:
                     print("[DEBUG] Removing resident record")
                     db.session.delete(user.resident)
+            
+            elif new_status == 'owner-resident':
+                # Ensure both records exist
+                print("[DEBUG] Creating owner-resident status")
+                if not current_is_resident:
+                    print("[DEBUG] Creating resident record for owner-resident")
+                    resident = Resident(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone_number', user.owner.phone_number if user.owner else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
+                        emergency_contact_number=data.get('emergency_contact_number', user.owner.emergency_contact_number if user.owner else ''),
+                        intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
+                        id_number=user.owner.id_number if user.owner and user.owner.id_number else 'TEMP_ID',
+                        erf_number=user.owner.erf_number if user.owner and user.owner.erf_number else 'TEMP_ERF',
+                        street_number=user.owner.street_number if user.owner else '',
+                        street_name=user.owner.street_name if user.owner else '',
+                        full_address=data.get('full_address', user.owner.full_address if user.owner else '')
+                    )
+                    db.session.add(resident)
+                
+                if not current_is_owner:
+                    print("[DEBUG] Creating owner record for owner-resident")
+                    owner = Owner(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone_number', user.resident.phone_number if user.resident else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
+                        emergency_contact_number=data.get('emergency_contact_number', user.resident.emergency_contact_number if user.resident else ''),
+                        intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
+                        id_number=user.resident.id_number if user.resident and user.resident.id_number else 'TEMP_ID',
+                        erf_number=user.resident.erf_number if user.resident and user.resident.erf_number else 'TEMP_ERF',
+                        street_number=user.resident.street_number if user.resident else '',
+                        street_name=user.resident.street_name if user.resident else '',
+                        full_address=data.get('full_address', user.resident.full_address if user.resident else '')
+                    )
+                    db.session.add(owner)
         
         # Update Resident information if user is a resident
         if user.resident and any(field in data for field in [
