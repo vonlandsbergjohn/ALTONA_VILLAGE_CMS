@@ -4,6 +4,7 @@ import Layout from '@/components/Layout';
 import LoginForm from '@/components/LoginForm';
 import RegisterForm from '@/components/RegisterForm';
 import AdminDashboard from '@/components/AdminDashboard';
+import AdminComplaints from '@/components/AdminComplaints';
 import PendingRegistrations from './components/PendingRegistrations';
 import ResidentDashboard from '@/components/ResidentDashboard';
 import ProfileManagement from '@/components/ProfileManagement';
@@ -91,7 +92,7 @@ const Router = () => {
         case '/admin/gate-register':
           return <div>Gate Register (Coming Soon)</div>;
         case '/admin/complaints':
-          return <div>Complaints Management (Coming Soon)</div>;
+          return <AdminComplaints />;
         case '/admin/pending':
           return <PendingRegistrations />;
         case '/admin/communication':
