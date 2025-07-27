@@ -21,7 +21,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  Filter
+  Filter,
+  X
 } from 'lucide-react';
 
 const AdminResidents = () => {
@@ -102,6 +103,12 @@ const AdminResidents = () => {
     setEditDialogOpen(true);
     setMessage({ type: '', text: '' });
     console.log('Dialog should be opening...');
+  };
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setFilterType('all');
+    setMessage({ type: '', text: '' });
   };
 
   const handleUpdateResident = async (e) => {
@@ -254,7 +261,27 @@ const AdminResidents = () => {
                 <option value="both">Owner-Residents</option>
               </select>
             </div>
+            <Button 
+              variant="outline" 
+              onClick={handleClearFilters}
+              className="w-full md:w-auto"
+              disabled={!searchTerm && filterType === 'all'}
+            >
+              <X className="w-4 h-4 mr-2" />
+              Clear
+            </Button>
           </div>
+          {(searchTerm || filterType !== 'all') && (
+            <div className="mt-3 text-sm text-gray-600">
+              Showing {filteredResidents.length} of {residents.length} residents
+              {searchTerm && (
+                <span> matching "{searchTerm}"</span>
+              )}
+              {filterType !== 'all' && (
+                <span> filtered by {filterType.replace('_', '-')}</span>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
