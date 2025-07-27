@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from src.models.user import User, Resident, db
+from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
 from datetime import timedelta
 
@@ -45,26 +45,26 @@ def register():
                 emergency_contact_number=data.get('emergency_contact_number'),
                 id_number=data['id_number'],
                 erf_number=data['erf_number'],
-                address=data['address'],
-                is_owner=data['is_owner']
+                address=data['address']
             )
             db.session.add(resident)
 
-        # Create Owner if checked (if you have an Owner model)
+        # Create Owner if checked
         if data['is_owner']:
-            # Uncomment and adjust if you have an Owner model
-            # owner = Owner(
-            #     user_id=user.id,
-            #     first_name=data['first_name'],
-            #     last_name=data['last_name'],
-            #     id_number=data['id_number'],
-            #     erf_number=data['erf_number'],
-            #     address=data['address'],
-            #     phone_number=data.get('phone_number'),
-            #     email=data['email']
-            # )
-            # db.session.add(owner)
-            pass  # Remove this if you add the Owner logic above
+            owner = Owner(
+                user_id=user.id,
+                first_name=data['first_name'],
+                last_name=data['last_name'],
+                phone_number=data.get('phone_number'),
+                emergency_contact_name=data.get('emergency_contact_name'),
+                emergency_contact_number=data.get('emergency_contact_number'),
+                id_number=data['id_number'],
+                erf_number=data['erf_number'],
+                address=data['address'],
+                postal_address=data.get('postal_address'),
+                title_deed_number=data.get('title_deed_number')
+            )
+            db.session.add(owner)
 
         db.session.commit()
         

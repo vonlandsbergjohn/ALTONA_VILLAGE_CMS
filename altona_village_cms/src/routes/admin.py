@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from src.models.user import User, Resident, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
+from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
 from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
 
@@ -56,10 +56,13 @@ def approve_registration(user_id):
         email_success = False
         email_message = "No email attempt made"
         
-        if user.resident:
-            email_success, email_message = send_approval_email(user.email, user.resident.first_name)
-            user.approval_email_sent = email_success
-            user.approval_email_sent_at = datetime.utcnow() if email_success else None
+        # Get the user's first name using the new User method
+        first_name = user.get_full_name().split(' ')[0]
+        
+        # Always attempt to send approval email
+        email_success, email_message = send_approval_email(user.email, first_name)
+        user.approval_email_sent = email_success
+        user.approval_email_sent_at = datetime.utcnow() if email_success else None
         
         db.session.commit()
         
@@ -89,11 +92,14 @@ def reject_registration(user_id):
         email_success = False
         email_message = "No email attempt made"
         
-        if user.resident:
-            email_success, email_message = send_rejection_email(user.email, user.resident.first_name)
-            user.rejection_email_sent = email_success
-            user.rejection_email_sent_at = datetime.utcnow() if email_success else None
-            db.session.commit()  # Save email status before deletion
+        # Get the user's first name using the new User method
+        first_name = user.get_full_name().split(' ')[0]
+        
+        # Always attempt to send rejection email
+        email_success, email_message = send_rejection_email(user.email, first_name)
+        user.rejection_email_sent = email_success
+        user.rejection_email_sent_at = datetime.utcnow() if email_success else None
+        db.session.commit()  # Save email status before deletion
         
         # Delete user and associated resident data
         db.session.delete(user)
@@ -416,6 +422,216 @@ def get_email_status():
             result.append(email_data)
         
         return jsonify(result), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Multi-Group Communication Endpoints
+@admin_bp.route('/communication/residents-group', methods=['GET'])
+@jwt_required()
+def get_residents_group():
+    """Get all users who are residents (including owner-residents)"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Get all users with resident records
+        users = User.query.join(Resident).filter(User.status == 'active').all()
+        result = []
+        
+        for user in users:
+            group_data = {
+                'id': user.id,
+                'email': user.email,
+                'name': user.get_full_name(),
+                'type': 'Owner-Resident' if user.is_owner_resident() else 'Resident',
+                'is_resident': True,
+                'is_owner': user.is_owner(),
+                'is_owner_resident': user.is_owner_resident(),
+                'erf_number': user.resident.erf_number if user.resident else None,
+                'address': user.resident.address if user.resident else None
+            }
+            result.append(group_data)
+        
+        return jsonify({
+            'group': 'residents',
+            'description': 'All residents (including owner-residents)',
+            'count': len(result),
+            'members': result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/communication/owners-group', methods=['GET'])
+@jwt_required()
+def get_owners_group():
+    """Get all users who are owners (including owner-residents)"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Get all users with owner records
+        users = User.query.join(Owner).filter(User.status == 'active').all()
+        result = []
+        
+        for user in users:
+            group_data = {
+                'id': user.id,
+                'email': user.email,
+                'name': user.get_full_name(),
+                'type': 'Owner-Resident' if user.is_owner_resident() else 'Non-Resident Owner',
+                'is_resident': user.is_resident(),
+                'is_owner': True,
+                'is_owner_resident': user.is_owner_resident(),
+                'erf_number': user.owner.erf_number if user.owner else None,
+                'address': user.owner.address if user.owner else None,
+                'postal_address': user.owner.postal_address if user.owner else None
+            }
+            result.append(group_data)
+        
+        return jsonify({
+            'group': 'owners',
+            'description': 'All owners (including owner-residents)', 
+            'count': len(result),
+            'members': result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/communication/non-resident-owners', methods=['GET'])
+@jwt_required()
+def get_non_resident_owners():
+    """Get all users who are owners but not residents"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Get users who have owner record but no resident record
+        users = User.query.join(Owner).outerjoin(Resident).filter(
+            User.status == 'active',
+            Resident.id == None  # No resident record
+        ).all()
+        result = []
+        
+        for user in users:
+            group_data = {
+                'id': user.id,
+                'email': user.email,
+                'name': user.get_full_name(),
+                'type': 'Non-Resident Owner',
+                'is_resident': False,
+                'is_owner': True,
+                'is_owner_resident': False,
+                'erf_number': user.owner.erf_number if user.owner else None,
+                'address': user.owner.address if user.owner else None,
+                'postal_address': user.owner.postal_address if user.owner else None
+            }
+            result.append(group_data)
+        
+        return jsonify({
+            'group': 'non-resident-owners',
+            'description': 'Owners who are not residents',
+            'count': len(result), 
+            'members': result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/communication/owner-residents', methods=['GET'])
+@jwt_required()
+def get_owner_residents():
+    """Get all users who are both owners and residents"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Get users who have both owner and resident records
+        users = User.query.join(Owner).join(Resident).filter(User.status == 'active').all()
+        result = []
+        
+        for user in users:
+            group_data = {
+                'id': user.id,
+                'email': user.email,
+                'name': user.get_full_name(),
+                'type': 'Owner-Resident',
+                'is_resident': True,
+                'is_owner': True,
+                'is_owner_resident': True,
+                'erf_number': user.resident.erf_number if user.resident else None,
+                'address': user.resident.address if user.resident else None,
+                'postal_address': user.owner.postal_address if user.owner else None
+            }
+            result.append(group_data)
+        
+        return jsonify({
+            'group': 'owner-residents',
+            'description': 'Users who are both owners and residents',
+            'count': len(result),
+            'members': result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/communication/groups-summary', methods=['GET'])
+@jwt_required()
+def get_groups_summary():
+    """Get summary of all communication groups"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Count different groups
+        residents_count = User.query.join(Resident).filter(User.status == 'active').count()
+        owners_count = User.query.join(Owner).filter(User.status == 'active').count()
+        non_resident_owners_count = User.query.join(Owner).outerjoin(Resident).filter(
+            User.status == 'active',
+            Resident.id == None
+        ).count()
+        owner_residents_count = User.query.join(Owner).join(Resident).filter(User.status == 'active').count()
+        
+        return jsonify({
+            'groups': [
+                {
+                    'id': 'residents',
+                    'name': 'All Residents',
+                    'description': 'All residents (including owner-residents)',
+                    'count': residents_count,
+                    'endpoint': '/api/admin/communication/residents-group'
+                },
+                {
+                    'id': 'owners', 
+                    'name': 'All Owners',
+                    'description': 'All owners (including owner-residents)',
+                    'count': owners_count,
+                    'endpoint': '/api/admin/communication/owners-group'
+                },
+                {
+                    'id': 'non-resident-owners',
+                    'name': 'Non-Resident Owners',
+                    'description': 'Owners who are not residents',
+                    'count': non_resident_owners_count,
+                    'endpoint': '/api/admin/communication/non-resident-owners'
+                },
+                {
+                    'id': 'owner-residents',
+                    'name': 'Owner-Residents',
+                    'description': 'Users who are both owners and residents',
+                    'count': owner_residents_count,
+                    'endpoint': '/api/admin/communication/owner-residents'
+                }
+            ],
+            'total_users': User.query.filter(User.status == 'active').count()
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

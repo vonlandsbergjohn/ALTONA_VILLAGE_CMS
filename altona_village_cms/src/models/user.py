@@ -23,14 +23,36 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationship
+    # Relationships - Updated for multi-group support
     resident = db.relationship('Resident', backref='user', uselist=False, cascade='all, delete-orphan')
+    owner = db.relationship('Owner', backref='user', uselist=False, cascade='all, delete-orphan')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+    
+    def is_resident(self):
+        """Check if user is a resident (including owner-residents)"""
+        return self.resident is not None
+    
+    def is_owner(self):
+        """Check if user is an owner (including owner-residents)"""
+        return self.owner is not None
+    
+    def is_owner_resident(self):
+        """Check if user is both owner and resident"""
+        return self.resident is not None and self.owner is not None
+    
+    def get_full_name(self):
+        """Get full name from resident or owner record"""
+        if self.resident:
+            return f"{self.resident.first_name} {self.resident.last_name}"
+        elif self.owner:
+            return f"{self.owner.first_name} {self.owner.last_name}"
+        else:
+            return self.email.split('@')[0].replace('.', ' ').title()
 
     def __repr__(self):
         return f'<User {self.email}>'
@@ -41,6 +63,10 @@ class User(db.Model):
             'email': self.email,
             'role': self.role,
             'status': self.status,
+            'is_resident': self.is_resident(),
+            'is_owner': self.is_owner(),
+            'is_owner_resident': self.is_owner_resident(),
+            'full_name': self.get_full_name(),
             'approval_email_sent': self.approval_email_sent,
             'approval_email_sent_at': self.approval_email_sent_at.isoformat() if self.approval_email_sent_at else None,
             'rejection_email_sent': self.rejection_email_sent,
@@ -59,10 +85,9 @@ class Resident(db.Model):
     phone_number = db.Column(db.String(20))
     emergency_contact_name = db.Column(db.String(255))
     emergency_contact_number = db.Column(db.String(20))
-    id_number = db.Column(db.String(50), nullable=False)  # Added missing field
-    erf_number = db.Column(db.String(50), nullable=False)  # Added missing field
-    address = db.Column(db.String(255), nullable=False)  # Added missing field
-    is_owner = db.Column(db.Boolean, nullable=False)
+    id_number = db.Column(db.String(50), nullable=False)
+    erf_number = db.Column(db.String(50), nullable=False)
+    address = db.Column(db.String(255), nullable=False)
     moving_in_date = db.Column(db.Date)
     moving_out_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -85,12 +110,57 @@ class Resident(db.Model):
             'phone_number': self.phone_number,
             'emergency_contact_name': self.emergency_contact_name,
             'emergency_contact_number': self.emergency_contact_number,
-            'id_number': self.id_number,  # Added missing field
-            'erf_number': self.erf_number,  # Added missing field
-            'address': self.address,  # Added missing field
-            'is_owner': self.is_owner,
+            'id_number': self.id_number,
+            'erf_number': self.erf_number,
+            'address': self.address,
             'moving_in_date': self.moving_in_date.isoformat() if self.moving_in_date else None,
             'moving_out_date': self.moving_out_date.isoformat() if self.moving_out_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class Owner(db.Model):
+    __tablename__ = 'owners'
+    
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, unique=True)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
+    phone_number = db.Column(db.String(20))
+    id_number = db.Column(db.String(50), nullable=False)
+    erf_number = db.Column(db.String(50), nullable=False)
+    address = db.Column(db.String(255), nullable=False)
+    # Owner-specific fields
+    title_deed_number = db.Column(db.String(100))
+    acquisition_date = db.Column(db.Date)
+    # Contact information for non-resident owners
+    postal_address = db.Column(db.String(255))
+    emergency_contact_name = db.Column(db.String(255))
+    emergency_contact_number = db.Column(db.String(20))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Owner-specific relationships
+    owned_properties = db.relationship('Property', backref='owner', lazy=True)
+
+    def __repr__(self):
+        return f'<Owner {self.first_name} {self.last_name}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'phone_number': self.phone_number,
+            'id_number': self.id_number,
+            'erf_number': self.erf_number,
+            'address': self.address,
+            'title_deed_number': self.title_deed_number,
+            'acquisition_date': self.acquisition_date.isoformat() if self.acquisition_date else None,
+            'postal_address': self.postal_address,
+            'emergency_contact_name': self.emergency_contact_name,
+            'emergency_contact_number': self.emergency_contact_number,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -101,7 +171,9 @@ class Property(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     erf_number = db.Column(db.String(50), unique=True, nullable=False)
     address = db.Column(db.String(255), nullable=False)
+    # Updated to support both resident and owner relationships
     resident_id = db.Column(db.String(36), db.ForeignKey('residents.id'))
+    owner_id = db.Column(db.String(36), db.ForeignKey('owners.id'))
     plot_registered_date = db.Column(db.Date)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -119,6 +191,7 @@ class Property(db.Model):
             'erf_number': self.erf_number,
             'address': self.address,
             'resident_id': self.resident_id,
+            'owner_id': self.owner_id,
             'plot_registered_date': self.plot_registered_date.isoformat() if self.plot_registered_date else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
