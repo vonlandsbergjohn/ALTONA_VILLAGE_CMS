@@ -932,3 +932,140 @@ def get_gate_access_register():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Admin Vehicle Management Endpoints
+@admin_bp.route('/residents/<user_id>/vehicles', methods=['GET'])
+@jwt_required()
+def get_resident_vehicles(user_id):
+    """Get all vehicles for a specific resident (admin access)"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        user = User.query.get_or_404(user_id)
+        if not user.resident:
+            return jsonify({'error': 'User is not a resident'}), 400
+        
+        vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
+        return jsonify([vehicle.to_dict() for vehicle in vehicles]), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/residents/<user_id>/vehicles', methods=['POST'])
+@jwt_required()
+def add_resident_vehicle(user_id):
+    """Add a vehicle for a specific resident (admin access)"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        user = User.query.get_or_404(user_id)
+        if not user.resident:
+            return jsonify({'error': 'User is not a resident'}), 400
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        if not data.get('registration_number'):
+            return jsonify({'error': 'Registration number is required'}), 400
+        
+        # Check if registration number already exists
+        existing_vehicle = Vehicle.query.filter_by(registration_number=data['registration_number']).first()
+        if existing_vehicle:
+            return jsonify({'error': 'Vehicle with this registration number already exists'}), 400
+        
+        # Create new vehicle
+        vehicle = Vehicle(
+            resident_id=user.resident.id,
+            registration_number=data['registration_number'],
+            make=data.get('make', ''),
+            model=data.get('model', ''),
+            color=data.get('color', '')
+        )
+        
+        db.session.add(vehicle)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Vehicle added successfully',
+            'vehicle': vehicle.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/residents/<user_id>/vehicles/<vehicle_id>', methods=['PUT'])
+@jwt_required()
+def update_resident_vehicle(user_id, vehicle_id):
+    """Update a vehicle for a specific resident (admin access)"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        user = User.query.get_or_404(user_id)
+        if not user.resident:
+            return jsonify({'error': 'User is not a resident'}), 400
+        
+        vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=user.resident.id).first()
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        data = request.get_json()
+        
+        # Check if new registration number conflicts with existing vehicles
+        if data.get('registration_number') and data['registration_number'] != vehicle.registration_number:
+            existing_vehicle = Vehicle.query.filter_by(registration_number=data['registration_number']).first()
+            if existing_vehicle:
+                return jsonify({'error': 'Vehicle with this registration number already exists'}), 400
+        
+        # Update vehicle fields
+        if 'registration_number' in data:
+            vehicle.registration_number = data['registration_number']
+        if 'make' in data:
+            vehicle.make = data['make']
+        if 'model' in data:
+            vehicle.model = data['model']
+        if 'color' in data:
+            vehicle.color = data['color']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Vehicle updated successfully',
+            'vehicle': vehicle.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/residents/<user_id>/vehicles/<vehicle_id>', methods=['DELETE'])
+@jwt_required()
+def delete_resident_vehicle(user_id, vehicle_id):
+    """Delete a vehicle for a specific resident (admin access)"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        user = User.query.get_or_404(user_id)
+        if not user.resident:
+            return jsonify({'error': 'User is not a resident'}), 400
+        
+        vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=user.resident.id).first()
+        if not vehicle:
+            return jsonify({'error': 'Vehicle not found'}), 404
+        
+        db.session.delete(vehicle)
+        db.session.commit()
+        
+        return jsonify({'message': 'Vehicle deleted successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+

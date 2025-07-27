@@ -24,7 +24,10 @@ import {
   Filter,
   X,
   KeyRound,
-  UserCheck
+  UserCheck,
+  Car,
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 const AdminResidents = () => {
@@ -37,6 +40,16 @@ const AdminResidents = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [updateLoading, setUpdateLoading] = useState(false);
+  
+  // Vehicle management state
+  const [vehicles, setVehicles] = useState([]);
+  const [vehicleLoading, setVehicleLoading] = useState(false);
+  const [newVehicle, setNewVehicle] = useState({
+    registration_number: '',
+    make: '',
+    model: '',
+    color: ''
+  });
 
   useEffect(() => {
     loadResidents();
@@ -96,15 +109,6 @@ const AdminResidents = () => {
     }
 
     setFilteredResidents(filtered);
-  };
-
-  const handleEditResident = (resident) => {
-    console.log('=== EDIT RESIDENT CLICKED ===');
-    console.log('Resident data:', resident);
-    setSelectedResident({ ...resident });
-    setEditDialogOpen(true);
-    setMessage({ type: '', text: '' });
-    console.log('Dialog should be opening...');
   };
 
   const handleClearFilters = () => {
@@ -228,6 +232,75 @@ const AdminResidents = () => {
     );
   };
 
+  // Vehicle Management Functions
+  const loadVehicles = async (userId) => {
+    if (!userId) return;
+    try {
+      setVehicleLoading(true);
+      const response = await adminAPI.getResidentVehicles(userId);
+      setVehicles(response.data);
+    } catch (error) {
+      console.error('Error loading vehicles:', error);
+      setMessage({ type: 'error', text: 'Failed to load vehicles' });
+    } finally {
+      setVehicleLoading(false);
+    }
+  };
+
+  const handleAddVehicle = async (e) => {
+    e.preventDefault();
+    if (!selectedResident?.id || !newVehicle.registration_number) return;
+
+    try {
+      setVehicleLoading(true);
+      await adminAPI.addResidentVehicle(selectedResident.id, newVehicle);
+      await loadVehicles(selectedResident.id);
+      setNewVehicle({ registration_number: '', make: '', model: '', color: '' });
+      setMessage({ type: 'success', text: 'Vehicle added successfully' });
+    } catch (error) {
+      console.error('Error adding vehicle:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to add vehicle' 
+      });
+    } finally {
+      setVehicleLoading(false);
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId) => {
+    if (!selectedResident?.id || !confirm('Are you sure you want to delete this vehicle?')) return;
+
+    try {
+      setVehicleLoading(true);
+      await adminAPI.deleteResidentVehicle(selectedResident.id, vehicleId);
+      await loadVehicles(selectedResident.id);
+      setMessage({ type: 'success', text: 'Vehicle deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting vehicle:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to delete vehicle' 
+      });
+    } finally {
+      setVehicleLoading(false);
+    }
+  };
+
+  // Enhanced handleEditResident to load vehicles
+  const handleEditResidentWithVehicles = (resident) => {
+    console.log('=== EDIT RESIDENT CLICKED ===');
+    console.log('Resident data:', resident);
+    setSelectedResident({ ...resident });
+    setEditDialogOpen(true);
+    setMessage({ type: '', text: '' });
+    // Load vehicles if resident has an ID and is a resident
+    if (resident.id && resident.is_resident) {
+      loadVehicles(resident.id);
+    }
+    console.log('Dialog should be opening...');
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -342,7 +415,7 @@ const AdminResidents = () => {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleEditResident(resident)}
+                  onClick={() => handleEditResidentWithVehicles(resident)}
                 >
                   <Edit className="w-4 h-4" />
                 </Button>
@@ -403,7 +476,7 @@ const AdminResidents = () => {
 
       {/* Edit Resident Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Resident Information</DialogTitle>
             <DialogDescription>
@@ -413,7 +486,7 @@ const AdminResidents = () => {
           
           {selectedResident && (
             <form onSubmit={handleUpdateResident} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit_first_name">First Name</Label>
                   <Input
@@ -568,6 +641,127 @@ const AdminResidents = () => {
               </div>
             </form>
           )}
+            
+          {/* Vehicle Management Section - Only show for residents */}
+          {selectedResident && selectedResident.is_resident && (
+              <div className="mt-6 pt-6 border-t space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    <Car className="w-5 h-5" />
+                    Vehicle Management
+                  </h3>
+                  <Badge variant="secondary">
+                    {vehicles.length} vehicle{vehicles.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+
+                {/* Add Vehicle Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm">Add New Vehicle</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleAddVehicle} className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="reg_number">Registration Number *</Label>
+                          <Input
+                            id="reg_number"
+                            value={newVehicle.registration_number}
+                            onChange={(e) => setNewVehicle({
+                              ...newVehicle,
+                              registration_number: e.target.value.toUpperCase()
+                            })}
+                            placeholder="e.g. ABC123GP"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="make">Make</Label>
+                          <Input
+                            id="make"
+                            value={newVehicle.make}
+                            onChange={(e) => setNewVehicle({
+                              ...newVehicle,
+                              make: e.target.value
+                            })}
+                            placeholder="e.g. Toyota"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="model">Model</Label>
+                          <Input
+                            id="model"
+                            value={newVehicle.model}
+                            onChange={(e) => setNewVehicle({
+                              ...newVehicle,
+                              model: e.target.value
+                            })}
+                            placeholder="e.g. Corolla"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="color">Color</Label>
+                          <Input
+                            id="color"
+                            value={newVehicle.color}
+                            onChange={(e) => setNewVehicle({
+                              ...newVehicle,
+                              color: e.target.value
+                            })}
+                            placeholder="e.g. White"
+                          />
+                        </div>
+                      </div>
+                      <Button type="submit" disabled={vehicleLoading} className="w-full">
+                        <Plus className="w-4 h-4 mr-2" />
+                        {vehicleLoading ? 'Adding...' : 'Add Vehicle'}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Vehicles List */}
+                <div className="space-y-2">
+                  <h4 className="font-medium">Current Vehicles</h4>
+                  {vehicleLoading && vehicles.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">Loading vehicles...</p>
+                  ) : vehicles.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No vehicles registered</p>
+                  ) : (
+                    vehicles.map((vehicle) => (
+                      <Card key={vehicle.id}>
+                        <CardContent className="flex items-center justify-between p-4">
+                          <div className="flex items-center space-x-4">
+                            <Car className="w-5 h-5 text-gray-400" />
+                            <div>
+                              <div className="font-mono font-semibold text-lg">
+                                {vehicle.registration_number}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {[vehicle.make, vehicle.model, vehicle.color]
+                                  .filter(Boolean)
+                                  .join(' • ')}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteVehicle(vehicle.id)}
+                            disabled={vehicleLoading}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
         </DialogContent>
       </Dialog>
     </div>

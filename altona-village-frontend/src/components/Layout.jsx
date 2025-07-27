@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   Shield,
-  User
+  User,
+  Clock
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -25,7 +26,7 @@ const Layout = ({ children }) => {
     { icon: Building, label: 'Properties', path: '/admin/properties' },
     { icon: Shield, label: 'Gate Register', path: '/admin/gate-register' },
     { icon: MessageSquare, label: 'Complaints', path: '/admin/complaints' },
-    { icon: Car, label: 'Pending Approvals', path: '/admin/pending' },
+    { icon: Clock, label: 'Pending Approvals', path: '/admin/pending' },
     { icon: Settings, label: 'Communication', path: '/admin/communication' },
   ];
 
