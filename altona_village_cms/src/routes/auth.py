@@ -323,6 +323,8 @@ def update_profile():
                     emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
                     emergency_contact_number=data.get('emergency_contact_number', user.owner.emergency_contact_number if user.owner else ''),
                     intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
+                    id_number=user.owner.id_number if user.owner and user.owner.id_number else 'TEMP_ID',  # Copy from owner or temp default
+                    erf_number=user.owner.erf_number if user.owner and user.owner.erf_number else 'TEMP_ERF',  # Copy from owner or temp default
                     street_number=user.owner.street_number if user.owner else '',
                     street_name=user.owner.street_name if user.owner else '',
                     full_address=data.get('full_address', user.owner.full_address if user.owner else '')
@@ -348,8 +350,8 @@ def update_profile():
                     street_number=user.resident.street_number if user.resident else '',
                     street_name=user.resident.street_name if user.resident else '',
                     full_address=data.get('full_address', user.resident.full_address if user.resident else ''),
-                    id_number=user.resident.id_number if user.resident else '',
-                    erf_number=user.resident.erf_number if user.resident else ''
+                    id_number=user.resident.id_number if user.resident and user.resident.id_number else 'TEMP_ID',
+                    erf_number=user.resident.erf_number if user.resident and user.resident.erf_number else 'TEMP_ERF'
                 )
                 db.session.add(owner)
                 
