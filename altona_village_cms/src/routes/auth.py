@@ -129,7 +129,50 @@ def profile():
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found'}), 404
-    return jsonify(user.to_dict()), 200
+    
+    # Create profile data in the format frontend expects
+    profile_data = {
+        'id': user.id,
+        'email': user.email,
+        'role': user.role,
+        'status': user.status,
+        'full_name': user.get_full_name() or '',
+        'phone': '',
+        'property_address': '',
+        'tenant_or_owner': '',
+        'emergency_contact_name': '',
+        'emergency_contact_phone': ''
+    }
+    
+    # Add resident data if available
+    if user.resident:
+        resident = user.resident
+        profile_data.update({
+            'phone': resident.phone_number or '',
+            'property_address': resident.full_address or '',
+            'emergency_contact_name': resident.emergency_contact_name or '',
+            'emergency_contact_phone': resident.emergency_contact_number or ''
+        })
+    
+    # Add owner data if available (overrides resident data for shared fields)
+    if user.owner:
+        owner = user.owner
+        profile_data.update({
+            'phone': owner.phone_number or profile_data['phone'],
+            'property_address': owner.full_address or profile_data['property_address'],
+            'emergency_contact_name': owner.emergency_contact_name or profile_data['emergency_contact_name'],
+            'emergency_contact_phone': owner.emergency_contact_number or profile_data['emergency_contact_phone']
+        })
+    
+    # Determine tenant_or_owner status
+    if user.is_owner() and user.is_resident():
+        profile_data['tenant_or_owner'] = 'owner'  # Owner-resident defaults to owner
+    elif user.is_owner():
+        profile_data['tenant_or_owner'] = 'owner'
+    elif user.is_resident():
+        profile_data['tenant_or_owner'] = 'tenant'
+    
+    return jsonify(profile_data), 200
 
 @auth_bp.route('/profile', methods=['PUT'])
 @jwt_required()
@@ -156,6 +199,20 @@ def update_profile():
         # Update password if provided
         if 'password' in data and data['password']:
             user.set_password(data['password'])
+        
+        # Handle full_name field from frontend - split into first and last name
+        if 'full_name' in data and data['full_name']:
+            name_parts = data['full_name'].strip().split(' ', 1)
+            data['first_name'] = name_parts[0]
+            data['last_name'] = name_parts[1] if len(name_parts) > 1 else ''
+        
+        # Map frontend field names to backend field names
+        if 'phone' in data:
+            data['phone_number'] = data['phone']
+        if 'property_address' in data:
+            data['full_address'] = data['property_address']
+        if 'emergency_contact_phone' in data:
+            data['emergency_contact_number'] = data['emergency_contact_phone']
         
         # Update Resident information if user is a resident
         if user.resident and any(field in data for field in [

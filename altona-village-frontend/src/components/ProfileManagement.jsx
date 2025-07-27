@@ -50,12 +50,13 @@ const ProfileManagement = () => {
 
     try {
       const response = await authAPI.updateProfile(profile);
-      setMessage({ type: 'success', text: 'Profile updated successfully' });
-      updateUser(response.data); // Update auth context
+      setMessage({ type: 'success', text: response.data.message || 'Profile updated successfully' });
+      updateUser(response.data.user); // Update auth context with user data
+      setProfile(response.data.user); // Update local profile state
     } catch (error) {
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.message || 'Failed to update profile' 
+        text: error.response?.data?.error || 'Failed to update profile' 
       });
     } finally {
       setLoading(false);
@@ -80,11 +81,11 @@ const ProfileManagement = () => {
     }
 
     try {
-      await authAPI.updateProfile({
+      const response = await authAPI.updateProfile({
         current_password: passwords.current_password,
-        new_password: passwords.new_password
+        password: passwords.new_password // Change key to 'password' to match backend
       });
-      setMessage({ type: 'success', text: 'Password changed successfully' });
+      setMessage({ type: 'success', text: response.data.message || 'Password changed successfully' });
       setPasswords({
         current_password: '',
         new_password: '',
@@ -93,7 +94,7 @@ const ProfileManagement = () => {
     } catch (error) {
       setMessage({ 
         type: 'error', 
-        text: error.response?.data?.message || 'Failed to change password' 
+        text: error.response?.data?.error || 'Failed to change password' 
       });
     } finally {
       setLoading(false);
