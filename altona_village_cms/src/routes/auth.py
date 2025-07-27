@@ -288,7 +288,7 @@ def update_profile():
         if user.resident and any(field in data for field in [
             'first_name', 'last_name', 'phone_number', 'id_number', 
             'street_number', 'street_name', 'erf_number', 
-            'emergency_contact_name', 'emergency_contact_number'
+            'emergency_contact_name', 'emergency_contact_number', 'intercom_code'
         ]):
             resident = user.resident
             
@@ -324,6 +324,10 @@ def update_profile():
             if 'emergency_contact_number' in data:
                 resident.emergency_contact_number = data['emergency_contact_number']
             
+            # Update intercom code
+            if 'intercom_code' in data:
+                resident.intercom_code = data['intercom_code']
+            
             # Update timestamps
             from datetime import datetime
             resident.updated_at = datetime.utcnow()
@@ -334,7 +338,7 @@ def update_profile():
             'street_number', 'street_name', 'erf_number', 'title_deed_number',
             'postal_street_number', 'postal_street_name', 'postal_suburb',
             'postal_city', 'postal_code', 'postal_province',
-            'emergency_contact_name', 'emergency_contact_number'
+            'emergency_contact_name', 'emergency_contact_number', 'intercom_code'
         ]):
             owner = user.owner
             
@@ -403,6 +407,10 @@ def update_profile():
                 owner.emergency_contact_name = data['emergency_contact_name']
             if 'emergency_contact_number' in data:
                 owner.emergency_contact_number = data['emergency_contact_number']
+            
+            # Update intercom code
+            if 'intercom_code' in data:
+                owner.intercom_code = data['intercom_code']
             
             # Update timestamps
             from datetime import datetime

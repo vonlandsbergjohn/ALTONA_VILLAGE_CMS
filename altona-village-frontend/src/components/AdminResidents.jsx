@@ -22,7 +22,8 @@ import {
   CheckCircle,
   Clock,
   Filter,
-  X
+  X,
+  KeyRound
 } from 'lucide-react';
 
 const AdminResidents = () => {
@@ -472,6 +473,23 @@ const AdminResidents = () => {
                       ...selectedResident,
                       emergency_contact_number: e.target.value
                     })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit_intercom_code">Intercom Code</Label>
+                <div className="relative">
+                  <KeyRound className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="edit_intercom_code"
+                    value={selectedResident.intercom_code || ''}
+                    onChange={(e) => setSelectedResident({
+                      ...selectedResident,
+                      intercom_code: e.target.value
+                    })}
+                    placeholder="Enter intercom access code"
+                    className="pl-10"
                   />
                 </div>
               </div>

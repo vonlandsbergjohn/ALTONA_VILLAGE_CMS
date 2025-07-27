@@ -92,6 +92,7 @@ class Resident(db.Model):
     street_number = db.Column(db.String(10), nullable=False)
     street_name = db.Column(db.String(100), nullable=False)
     full_address = db.Column(db.String(255), nullable=False)  # For display purposes
+    intercom_code = db.Column(db.String(20))  # Intercom access code
     
     moving_in_date = db.Column(db.Date)
     moving_out_date = db.Column(db.Date)
@@ -135,6 +136,7 @@ class Resident(db.Model):
             'street_number': self.street_number,
             'street_name': self.street_name,
             'full_address': self.full_address,
+            'intercom_code': self.intercom_code,
             'display_address': self.display_address,
             'gate_access_info': self.gate_access_info,
             'moving_in_date': self.moving_in_date.isoformat() if self.moving_in_date else None,
@@ -158,6 +160,7 @@ class Owner(db.Model):
     street_number = db.Column(db.String(10), nullable=False)
     street_name = db.Column(db.String(100), nullable=False)
     full_address = db.Column(db.String(255), nullable=False)  # For display purposes
+    intercom_code = db.Column(db.String(20))  # Intercom access code
     
     # Owner-specific fields
     title_deed_number = db.Column(db.String(100))
@@ -231,6 +234,7 @@ class Owner(db.Model):
             'street_number': self.street_number,
             'street_name': self.street_name,
             'full_address': self.full_address,
+            'intercom_code': self.intercom_code,
             'display_address': self.display_address,
             'title_deed_number': self.title_deed_number,
             'acquisition_date': self.acquisition_date.isoformat() if self.acquisition_date else None,

@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { User, Mail, Phone, Shield, Calendar, MapPin } from 'lucide-react';
+import { User, Mail, Phone, Shield, Calendar, MapPin, KeyRound } from 'lucide-react';
 
 const ProfileManagement = () => {
   const { user, updateProfile: updateUserProfile } = useAuth();
@@ -20,7 +20,8 @@ const ProfileManagement = () => {
     emergency_contact_name: '',
     emergency_contact_phone: '',
     property_address: '',
-    tenant_or_owner: ''
+    tenant_or_owner: '',
+    intercom_code: ''
   });
   const [passwords, setPasswords] = useState({
     current_password: '',
@@ -280,6 +281,20 @@ const ProfileManagement = () => {
                       value={profile.property_address}
                       onChange={(e) => setProfile({...profile, property_address: e.target.value})}
                       placeholder="Your property address in Altona Village"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="intercom_code">Intercom Code</Label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="intercom_code"
+                      value={profile.intercom_code}
+                      onChange={(e) => setProfile({...profile, intercom_code: e.target.value})}
+                      placeholder="Enter your intercom access code"
                       className="pl-10"
                     />
                   </div>
