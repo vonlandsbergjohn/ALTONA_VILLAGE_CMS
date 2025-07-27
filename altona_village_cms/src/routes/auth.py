@@ -130,3 +130,170 @@ def profile():
     if not user:
         return jsonify({'error': 'User not found'}), 404
     return jsonify(user.to_dict()), 200
+
+@auth_bp.route('/profile', methods=['PUT'])
+@jwt_required()
+def update_profile():
+    """Update user profile information"""
+    try:
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data received'}), 400
+        
+        # Update User model fields
+        if 'email' in data:
+            # Check if email is already taken by another user
+            existing_user = User.query.filter(User.email == data['email'], User.id != user_id).first()
+            if existing_user:
+                return jsonify({'error': 'Email already in use'}), 400
+            user.email = data['email']
+        
+        # Update password if provided
+        if 'password' in data and data['password']:
+            user.set_password(data['password'])
+        
+        # Update Resident information if user is a resident
+        if user.resident and any(field in data for field in [
+            'first_name', 'last_name', 'phone_number', 'id_number', 
+            'street_number', 'street_name', 'erf_number', 
+            'emergency_contact_name', 'emergency_contact_number'
+        ]):
+            resident = user.resident
+            
+            # Update basic info
+            if 'first_name' in data:
+                resident.first_name = data['first_name']
+            if 'last_name' in data:
+                resident.last_name = data['last_name']
+            if 'phone_number' in data:
+                resident.phone_number = data['phone_number']
+            if 'id_number' in data:
+                resident.id_number = data['id_number']
+            if 'erf_number' in data:
+                resident.erf_number = data['erf_number']
+            
+            # Update address components
+            if 'street_number' in data:
+                resident.street_number = data['street_number']
+            if 'street_name' in data:
+                resident.street_name = data['street_name']
+            
+            # Update full address if street components are provided
+            if 'street_number' in data or 'street_name' in data:
+                street_num = data.get('street_number', resident.street_number)
+                street_name = data.get('street_name', resident.street_name)
+                resident.full_address = f"{street_num} {street_name}".strip()
+            elif 'full_address' in data:
+                resident.full_address = data['full_address']
+            
+            # Update emergency contacts
+            if 'emergency_contact_name' in data:
+                resident.emergency_contact_name = data['emergency_contact_name']
+            if 'emergency_contact_number' in data:
+                resident.emergency_contact_number = data['emergency_contact_number']
+            
+            # Update timestamps
+            from datetime import datetime
+            resident.updated_at = datetime.utcnow()
+        
+        # Update Owner information if user is an owner
+        if user.owner and any(field in data for field in [
+            'first_name', 'last_name', 'phone_number', 'id_number',
+            'street_number', 'street_name', 'erf_number', 'title_deed_number',
+            'postal_street_number', 'postal_street_name', 'postal_suburb',
+            'postal_city', 'postal_code', 'postal_province',
+            'emergency_contact_name', 'emergency_contact_number'
+        ]):
+            owner = user.owner
+            
+            # Update basic info
+            if 'first_name' in data:
+                owner.first_name = data['first_name']
+            if 'last_name' in data:
+                owner.last_name = data['last_name']
+            if 'phone_number' in data:
+                owner.phone_number = data['phone_number']
+            if 'id_number' in data:
+                owner.id_number = data['id_number']
+            if 'erf_number' in data:
+                owner.erf_number = data['erf_number']
+            if 'title_deed_number' in data:
+                owner.title_deed_number = data['title_deed_number']
+            
+            # Update address components
+            if 'street_number' in data:
+                owner.street_number = data['street_number']
+            if 'street_name' in data:
+                owner.street_name = data['street_name']
+            
+            # Update full address if street components are provided
+            if 'street_number' in data or 'street_name' in data:
+                street_num = data.get('street_number', owner.street_number)
+                street_name = data.get('street_name', owner.street_name)
+                owner.full_address = f"{street_num} {street_name}".strip()
+            elif 'full_address' in data:
+                owner.full_address = data['full_address']
+            
+            # Update postal address components
+            if 'postal_street_number' in data:
+                owner.postal_street_number = data['postal_street_number']
+            if 'postal_street_name' in data:
+                owner.postal_street_name = data['postal_street_name'] 
+            if 'postal_suburb' in data:
+                owner.postal_suburb = data['postal_suburb']
+            if 'postal_city' in data:
+                owner.postal_city = data['postal_city']
+            if 'postal_code' in data:
+                owner.postal_code = data['postal_code']
+            if 'postal_province' in data:
+                owner.postal_province = data['postal_province']
+            
+            # Update full postal address if components are provided
+            postal_parts = []
+            if owner.postal_street_number and owner.postal_street_name:
+                postal_parts.append(f"{owner.postal_street_number} {owner.postal_street_name}")
+            if owner.postal_suburb:
+                postal_parts.append(owner.postal_suburb)
+            if owner.postal_city:
+                postal_parts.append(owner.postal_city)
+            if owner.postal_code:
+                postal_parts.append(owner.postal_code)
+            if owner.postal_province:
+                postal_parts.append(owner.postal_province)
+            
+            if postal_parts:
+                owner.full_postal_address = ", ".join(postal_parts)
+            elif 'full_postal_address' in data:
+                owner.full_postal_address = data['full_postal_address']
+            
+            # Update emergency contacts
+            if 'emergency_contact_name' in data:
+                owner.emergency_contact_name = data['emergency_contact_name']
+            if 'emergency_contact_number' in data:
+                owner.emergency_contact_number = data['emergency_contact_number']
+            
+            # Update timestamps
+            from datetime import datetime
+            owner.updated_at = datetime.utcnow()
+        
+        # Update user timestamp
+        from datetime import datetime
+        user.updated_at = datetime.utcnow()
+        
+        # Commit all changes
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Profile updated successfully',
+            'user': user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Profile update error: {str(e)}")  # For debugging
+        return jsonify({'error': f'Failed to update profile: {str(e)}'}), 500
