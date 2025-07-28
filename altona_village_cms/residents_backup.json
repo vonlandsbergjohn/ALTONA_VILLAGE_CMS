@@ -1,0 +1,1 @@
+{"columns": ["id", "user_id", "first_name", "last_name", "phone_number", "emergency_contact_name", "emergency_contact_number", "is_owner", "moving_in_date", "moving_out_date", "created_at", "updated_at"], "data": []}
