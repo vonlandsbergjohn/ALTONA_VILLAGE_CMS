@@ -283,6 +283,25 @@ def update_resident(user_id):
         # Handle resident status change (support both field names for compatibility)  
         if 'resident_status_change' in data or 'tenant_or_owner' in data:
             new_status = data.get('resident_status_change') or data.get('tenant_or_owner')
+            
+            # Map frontend status names to backend values
+            status_mapping = {
+                'Property Owner': 'owner',
+                'property owner': 'owner',
+                'Owner': 'owner',
+                'owner': 'owner',
+                'Tenant': 'tenant',
+                'tenant': 'tenant',
+                'Resident': 'tenant',
+                'resident': 'tenant',
+                'Owner-Resident': 'owner-resident',
+                'owner-resident': 'owner-resident',
+                'Property Owner-Resident': 'owner-resident'
+            }
+            
+            # Use mapped status or original if not found
+            new_status = status_mapping.get(new_status, new_status)
+            
             current_is_resident = user.resident is not None
             current_is_owner = user.owner is not None
             
@@ -648,7 +667,11 @@ def get_gate_register():
             
             result.append(vehicle_data)
         
-        return jsonify(result), 200
+        return jsonify({
+            'success': True,
+            'data': result,
+            'count': len(result)
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

@@ -7,7 +7,7 @@ import io
 
 gate_register_bp = Blueprint('gate_register', __name__)
 
-@gate_register_bp.route('/gate-register', methods=['GET'])
+@gate_register_bp.route('/gate-register-legacy', methods=['GET'])
 @jwt_required()
 def get_gate_register():
     """
