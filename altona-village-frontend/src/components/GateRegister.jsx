@@ -234,6 +234,7 @@ const GateRegister = () => {
                 <TableRow>
                   <TableHead>Resident Status</TableHead>
                   <TableHead>Surname</TableHead>
+                  <TableHead>Phone Number</TableHead>
                   <TableHead>Street Nr</TableHead>
                   <TableHead>Street Name</TableHead>
                   <TableHead>Vehicle Registration</TableHead>
@@ -244,7 +245,7 @@ const GateRegister = () => {
               <TableBody>
                 {gateData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
                       No gate register entries found
                     </TableCell>
                   </TableRow>
@@ -260,6 +261,13 @@ const GateRegister = () => {
                             </TableCell>
                             <TableCell className="font-medium">
                               {vehicleIndex === 0 ? entry.surname : ''}
+                            </TableCell>
+                            <TableCell>
+                              {vehicleIndex === 0 && entry.phone_number && (
+                                <span className="font-mono bg-green-100 px-2 py-1 rounded text-sm">
+                                  {entry.phone_number}
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell>
                               {vehicleIndex === 0 ? entry.street_number : ''}
@@ -289,6 +297,13 @@ const GateRegister = () => {
                         <TableRow key={index}>
                           <TableCell>{getStatusBadge(entry.resident_status)}</TableCell>
                           <TableCell className="font-medium">{entry.surname}</TableCell>
+                          <TableCell>
+                            {entry.phone_number && (
+                              <span className="font-mono bg-green-100 px-2 py-1 rounded text-sm">
+                                {entry.phone_number}
+                              </span>
+                            )}
+                          </TableCell>
                           <TableCell>{entry.street_number}</TableCell>
                           <TableCell>{entry.street_name}</TableCell>
                           <TableCell>

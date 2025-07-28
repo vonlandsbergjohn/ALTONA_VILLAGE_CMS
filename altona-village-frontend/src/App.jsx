@@ -4,8 +4,10 @@ import Layout from '@/components/Layout';
 import LoginForm from '@/components/LoginForm';
 import RegisterForm from '@/components/RegisterForm';
 import AdminDashboard from '@/components/AdminDashboard';
+// import SimpleTest from '@/components/SimpleTest';
 import AdminComplaints from '@/components/AdminComplaints';
 import AdminResidents from '@/components/AdminResidents';
+import AdminNotificationsDashboard from '@/components/AdminNotificationsDashboard';
 import GateRegister from '@/components/GateRegister';
 import PendingRegistrations from './components/PendingRegistrations';
 import ResidentDashboard from '@/components/ResidentDashboard';
@@ -97,6 +99,8 @@ const Router = () => {
           return <AdminComplaints />;
         case '/admin/pending':
           return <PendingRegistrations />;
+        case '/admin/notifications':
+          return <AdminNotificationsDashboard />;
         case '/admin/communication':
           return <div>Communication Tools (Coming Soon)</div>;
         default:

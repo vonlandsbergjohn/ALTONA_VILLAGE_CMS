@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gate Register Changes - Preview</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { border-bottom: 2px solid #3b82f6; padding-bottom: 15px; margin-bottom: 20px; }
+        .header h1 { color: #1f2937; margin: 0; display: flex; align-items: center; }
+        .header .icon { width: 24px; height: 24px; margin-right: 10px; background: #3b82f6; border-radius: 50%; }
+        .stats { background: #dbeafe; border: 1px solid #93c5fd; border-radius: 6px; padding: 15px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #d1d5db; padding: 12px; text-align: left; }
+        th { background-color: #f9fafb; font-weight: 600; color: #374151; }
+        tr:nth-child(even) { background-color: #f9fafb; }
+        tr:hover { background-color: #f3f4f6; }
+        .changed { background-color: #fecaca !important; color: #991b1b; font-weight: bold; border: 2px solid #f87171; }
+        .export-btn { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin-bottom: 20px; }
+        .export-btn:hover { background: #2563eb; }
+        .legend { background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px; margin-top: 20px; }
+        .legend h3 { margin-top: 0; color: #92400e; }
+        .highlight-demo { display: inline-block; width: 20px; height: 20px; background: #fecaca; border: 2px solid #f87171; border-radius: 3px; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><div class="icon"></div>Gate Register - Change Tracking System</h1>
+            <p style="color: #6b7280; margin: 5px 0 0 34px;">Your improved architecture: Single source of truth for notifications</p>
+        </div>
+
+        <div class="stats">
+            <strong>📊 Current Status:</strong><br>
+            • <strong>5 pending changes</strong> found in database<br>
+            • <strong>2 users</strong> with phone number updates<br>
+            • <strong>1 user</strong> with vehicle registration change<br>
+            • <strong>Export format:</strong> Red highlighting for changed fields<br>
+        </div>
+
+        <button class="export-btn">📥 Export Changes (HTML with Red Highlighting)</button>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>First Name</th>
+                    <th>Surname</th>
+                    <th>Phone Number</th>
+                    <th>Street Nr</th>
+                    <th>Street Name</th>
+                    <th>Vehicle Registration</th>
+                    <th>ERF Nr</th>
+                    <th>Intercom</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Resident</td>
+                    <td>Marilize</td>
+                    <td>von landsberg</td>
+                    <td class="changed">🔴 0836849157</td>
+                    <td>27727</td>
+                    <td>Some Street</td>
+                    <td class="changed">🔴 CW4589</td>
+                    <td>27727</td>
+                    <td>12345</td>
+                </tr>
+                <tr>
+                    <td>Resident</td>
+                    <td>Xosa</td>
+                    <td>Sibuta</td>
+                    <td class="changed">🔴 0815863254</td>
+                    <td>4568</td>
+                    <td>Another Street</td>
+                    <td>-</td>
+                    <td>4568</td>
+                    <td>67890</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="legend">
+            <h3>🎯 How It Works:</h3>
+            <div style="margin: 10px 0;">
+                <span class="highlight-demo"></span>
+                <strong>Red Background = Changed Information</strong>
+            </div>
+            <ul style="margin: 10px 0;">
+                <li><strong>Single Source of Truth:</strong> Gate register contains all critical data</li>
+                <li><strong>Smart Filtering:</strong> Shows only users with recent changes</li>
+                <li><strong>Visual Highlighting:</strong> Red background for changed phone numbers and vehicle registrations</li>
+                <li><strong>Export Ready:</strong> HTML format perfect for external systems (Accentronix gate, camera system)</li>
+                <li><strong>No Duplicate Tracking:</strong> Eliminates multiple change tracking systems</li>
+            </ul>
+        </div>
+
+        <div style="background: #dcfce7; border: 1px solid #22c55e; border-radius: 6px; padding: 15px; margin-top: 20px;">
+            <h3 style="color: #166534; margin-top: 0;">✅ System Status: READY</h3>
+            <p style="color: #166534; margin-bottom: 0;">
+                The gate register-based notification system is live and integrated into your admin dashboard. 
+                Access it at: <strong>Admin Dashboard → Gate Register - Change Tracking</strong>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

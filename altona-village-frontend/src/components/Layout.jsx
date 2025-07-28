@@ -13,7 +13,8 @@ import {
   X,
   Shield,
   User,
-  Clock
+  Clock,
+  Bell
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -27,6 +28,7 @@ const Layout = ({ children }) => {
     { icon: Shield, label: 'Gate Register', path: '/admin/gate-register' },
     { icon: MessageSquare, label: 'Complaints', path: '/admin/complaints' },
     { icon: Clock, label: 'Pending Approvals', path: '/admin/pending' },
+    { icon: Bell, label: 'System Notifications', path: '/admin/notifications' },
     { icon: Settings, label: 'Communication', path: '/admin/communication' },
   ];
 

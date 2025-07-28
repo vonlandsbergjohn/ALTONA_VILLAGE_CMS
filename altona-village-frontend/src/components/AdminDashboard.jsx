@@ -3,6 +3,7 @@ import { adminAPI } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import GateRegisterChanges from './GateRegisterChanges';
 import { 
   Users, 
   Building, 
@@ -11,7 +12,11 @@ import {
   Clock, 
   CheckCircle,
   AlertTriangle,
-  TrendingUp
+  TrendingUp,
+  Bell,
+  Phone,
+  Download,
+  Eye
 } from 'lucide-react';
 
 const AdminDashboard = () => {
@@ -22,6 +27,11 @@ const AdminDashboard = () => {
     pendingRegistrations: 0,
     openComplaints: 0,
     recentComplaints: []
+  });
+  const [notifications, setNotifications] = useState({
+    criticalPending: 0,
+    totalPending: 0,
+    recentChanges: []
   });
   const [loading, setLoading] = useState(true);
 
@@ -52,10 +62,52 @@ const AdminDashboard = () => {
         openComplaints: openComplaints.length,
         recentComplaints
       });
+
+      // Load notification data
+      await loadNotificationData();
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadNotificationData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+
+      const [statsRes, criticalRes] = await Promise.all([
+        fetch('/api/admin/changes/stats', { headers }),
+        fetch('/api/admin/changes/critical', { headers })
+      ]);
+
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        const stats = statsData.stats || {};
+        
+        if (criticalRes.ok) {
+          const criticalData = await criticalRes.json();
+          const changes = criticalData.critical_changes || [];
+          
+          setNotifications({
+            criticalPending: stats.critical_pending || 0,
+            totalPending: stats.total_pending || 0,
+            recentChanges: changes.slice(0, 3) // Show only 3 most recent
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error loading notification data:', error);
+      // Set default values on error
+      setNotifications({
+        criticalPending: 0,
+        totalPending: 0,
+        recentChanges: []
+      });
     }
   };
 
@@ -73,6 +125,31 @@ const AdminDashboard = () => {
       </CardContent>
     </Card>
   );
+
+  const exportData = async (type) => {
+    try {
+      // Use the new gate register changes export instead of old system
+      console.log(`Exporting data for ${type} system...`);
+      
+      const response = await adminAPI.exportGateRegisterChanges();
+      
+      // Create and download the HTML file with red highlighting
+      const url = window.URL.createObjectURL(response);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `${type}_gate_register_changes_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.html`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      console.log(`Successfully exported ${type} data`);
+    } catch (error) {
+      console.error(`Export failed for ${type}:`, error);
+      alert(`Export failed for ${type}: ${error.message}`);
+    }
+  };
 
   const getComplaintStatusColor = (status) => {
     switch (status) {
@@ -138,6 +215,134 @@ const AdminDashboard = () => {
           description="Requiring attention"
         />
       </div>
+
+      {/* System Notifications Section */}
+      {notifications.criticalPending > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="flex items-center text-red-800">
+              <Bell className="h-5 w-5 mr-2" />
+              🚨 Critical System Updates ({notifications.criticalPending})
+            </CardTitle>
+            <CardDescription className="text-red-700">
+              Residents have updated phone numbers or vehicle registrations - External systems need updating!
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {notifications.recentChanges.map((change) => (
+                <div key={change.id} className="bg-white p-3 rounded-lg border border-red-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {change.field_name === 'cellphone_number' ? (
+                        <Phone className="w-4 h-4 text-blue-600" />
+                      ) : (
+                        <Car className="w-4 h-4 text-green-600" />
+                      )}
+                      <div>
+                        <p className="font-medium text-sm">{change.user_name} (ERF {change.erf_number})</p>
+                        <p className="text-xs text-gray-600">
+                          {change.field_name === 'cellphone_number' ? 'Phone Number' : 'Vehicle Registration'} Updated
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500">
+                        {new Date(change.change_timestamp).toLocaleDateString()}
+                      </p>
+                      <Badge variant="destructive" className="text-xs">
+                        Needs Action
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs">
+                    <span className="text-red-600 line-through">{change.old_value}</span>
+                    <span className="mx-2">→</span>
+                    <span className="text-green-600 font-medium">{change.new_value}</span>
+                  </div>
+                </div>
+              ))}
+              
+              <div className="flex gap-2 mt-4">
+                <Button 
+                  onClick={() => window.location.href = '/admin/notifications'}
+                  className="flex-1"
+                  variant="default"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  View All Changes
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* System Update Status */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Bell className="h-5 h-5 mr-2" />
+              System Change Notifications
+            </div>
+            <Badge variant={notifications.criticalPending > 0 ? "destructive" : "secondary"}>
+              {notifications.totalPending} Pending
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Track resident data changes for Accentronix gate system and camera system updates
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
+              <div className="text-2xl font-bold text-red-600">{notifications.criticalPending}</div>
+              <div className="text-sm text-red-700">Critical Changes</div>
+              <div className="text-xs text-gray-600">Phone & Vehicle Updates</div>
+            </div>
+            <div className="text-center p-3 bg-gray-50 rounded-lg border">
+              <div className="text-2xl font-bold text-gray-600">{notifications.totalPending}</div>
+              <div className="text-sm text-gray-700">Total Changes</div>
+              <div className="text-xs text-gray-600">All Pending Reviews</div>
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => window.location.href = '/admin/notifications'}
+              className="flex-1"
+              variant={notifications.criticalPending > 0 ? "default" : "outline"}
+            >
+              Manage Changes
+            </Button>
+            <Button 
+              onClick={() => exportData('changes')}
+              variant="outline"
+              className="flex-1"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export Changes
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Gate Register Changes Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center">
+            <TrendingUp className="h-5 w-5 mr-2" />
+            Gate Register - Change Tracking
+          </CardTitle>
+          <CardDescription>
+            View only residents with recent changes, export with red highlighting for external systems
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GateRegisterChanges />
+        </CardContent>
+      </Card>
 
       {/* Action Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

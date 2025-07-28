@@ -55,6 +55,25 @@ export const adminAPI = {
   updateComplaint: (complaintId, data) => api.post(`/admin/complaints/${complaintId}/update`, data),
   getGateRegister: () => api.get('/admin/gate-register'),
   exportGateRegister: () => api.get('/admin/gate-register/export', { responseType: 'blob' }),
+  getGateRegisterChanges: () => api.get('/admin/gate-register/changes'),
+  exportGateRegisterChanges: async () => {
+    try {
+      const response = await api.get('/admin/gate-register/export-changes', { responseType: 'blob' });
+      return response.data;
+    } catch (error) {
+      // If there's an error with blob response, try without blob to get proper error message
+      if (error.response && error.response.status >= 400) {
+        try {
+          const errorResponse = await api.get('/admin/gate-register/export-changes');
+          throw new Error(errorResponse.data?.error || `HTTP ${error.response.status}`);
+        } catch (secondError) {
+          throw error; // Use original error if second request also fails
+        }
+      }
+      throw error;
+    }
+  },
+  markChangeProcessed: (changeId) => api.post(`/admin/changes/${changeId}/mark-processed`),
   // Admin Vehicle Management
   getResidentVehicles: (userId) => api.get(`/admin/residents/${userId}/vehicles`),
   addResidentVehicle: (userId, data) => api.post(`/admin/residents/${userId}/vehicles`, data),

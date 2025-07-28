@@ -4,6 +4,14 @@ from src.models.user import User, Resident, Owner, Vehicle, db
 from src.utils.email_service import send_registration_notification_to_admin
 from datetime import timedelta
 
+# Import change tracking function
+try:
+    from src.routes.admin_notifications import log_user_change
+except ImportError:
+    # Fallback if admin_notifications module doesn't exist yet
+    def log_user_change(*args, **kwargs):
+        pass
+
 def parse_address(address):
     """Parse address to extract street number and street name"""
     if not address:
@@ -263,6 +271,29 @@ def update_profile():
         if not data:
             return jsonify({'error': 'No data received'}), 400
         
+        # Helper function to track changes for critical fields
+        def track_change(field_name, old_value, new_value, change_type="profile_update"):
+            if old_value != new_value:
+                # Get user details for logging
+                user_name = f"{getattr(user.resident, 'first_name', '') or getattr(user.owner, 'first_name', '')} {getattr(user.resident, 'last_name', '') or getattr(user.owner, 'last_name', '')}".strip()
+                erf_number = getattr(user.resident, 'erf_number', '') or getattr(user.owner, 'erf_number', '') or 'Unknown'
+                
+                # Only track critical fields that affect external systems
+                critical_fields = ['phone_number', 'cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
+                if field_name in critical_fields:
+                    try:
+                        log_user_change(
+                            user_id=user.id,
+                            user_name=user_name,
+                            erf_number=erf_number,
+                            change_type=change_type,
+                            field_name=field_name,
+                            old_value=str(old_value) if old_value else '',
+                            new_value=str(new_value) if new_value else ''
+                        )
+                    except Exception as e:
+                        print(f"Failed to log change for {field_name}: {str(e)}")
+
         # Update User model fields
         if 'email' in data:
             # Check if email is already taken by another user
@@ -420,6 +451,8 @@ def update_profile():
             if 'last_name' in data:
                 resident.last_name = data['last_name']
             if 'phone_number' in data:
+                # Track phone number changes for Accentronix system
+                track_change('cellphone_number', resident.phone_number, data['phone_number'])
                 resident.phone_number = data['phone_number']
             if 'id_number' in data:
                 resident.id_number = data['id_number']
@@ -470,6 +503,8 @@ def update_profile():
             if 'last_name' in data:
                 owner.last_name = data['last_name']
             if 'phone_number' in data:
+                # Track phone number changes for Accentronix system
+                track_change('cellphone_number', owner.phone_number, data['phone_number'])
                 owner.phone_number = data['phone_number']
             if 'id_number' in data:
                 owner.id_number = data['id_number']

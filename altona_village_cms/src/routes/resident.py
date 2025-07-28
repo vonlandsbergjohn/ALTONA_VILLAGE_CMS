@@ -2,6 +2,14 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.models.user import User, Resident, Owner, Vehicle, Complaint, ComplaintUpdate, db
 
+# Import change tracking function
+try:
+    from src.routes.admin_notifications import log_user_change
+except ImportError:
+    # Fallback if admin_notifications module doesn't exist yet
+    def log_user_change(*args, **kwargs):
+        pass
+
 resident_bp = Blueprint('resident', __name__)
 
 def get_current_user_data():
@@ -112,6 +120,26 @@ def update_vehicle(vehicle_id):
             existing = Vehicle.query.filter_by(registration_number=data['registration_number']).first()
             if existing and existing.id != vehicle_id:
                 return jsonify({'error': 'Vehicle with this registration number already exists'}), 400
+            
+            # Track vehicle registration changes for camera system
+            if vehicle.registration_number != data['registration_number']:
+                # Get user details for logging
+                user_name = f"{getattr(user.resident, 'first_name', '') or getattr(user.owner, 'first_name', '')} {getattr(user.resident, 'last_name', '') or getattr(user.owner, 'last_name', '')}".strip()
+                erf_number = getattr(user.resident, 'erf_number', '') or getattr(user.owner, 'erf_number', '') or 'Unknown'
+                
+                try:
+                    log_user_change(
+                        user_id=user.id,
+                        user_name=user_name,
+                        erf_number=erf_number,
+                        change_type="vehicle_update",
+                        field_name="vehicle_registration",
+                        old_value=vehicle.registration_number or '',
+                        new_value=data['registration_number']
+                    )
+                except Exception as e:
+                    print(f"Failed to log vehicle registration change: {str(e)}")
+            
             vehicle.registration_number = data['registration_number']
         
         vehicle.make = data.get('make', vehicle.make)
