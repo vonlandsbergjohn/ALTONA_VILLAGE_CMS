@@ -63,7 +63,6 @@ const AdminResidents = () => {
     try {
       setLoading(true);
       const response = await adminAPI.getAllResidents();
-      console.log('Residents data:', response.data);
       setResidents(response.data || []);
     } catch (error) {
       console.error('Failed to load residents:', error);
@@ -133,11 +132,9 @@ const AdminResidents = () => {
         emergency_contact_name: selectedResident.emergency_contact_name,
         emergency_contact_phone: selectedResident.emergency_contact_number,
         property_address: selectedResident.full_address,
-        tenant_or_owner: getResidentStatusValue(selectedResident),
+        resident_status_change: getResidentStatusValue(selectedResident),
         intercom_code: selectedResident.intercom_code
       };
-
-      console.log('Updating resident with data:', updateData);
       
       // Use the admin API to update the resident
       await adminAPI.updateResident(selectedResident.user_id, updateData);
@@ -159,15 +156,15 @@ const AdminResidents = () => {
   const getResidentStatusValue = (resident) => {
     if (resident.is_resident && resident.is_owner) return 'owner-resident';
     if (resident.is_owner) return 'owner';
-    if (resident.is_resident) return 'tenant';
-    return 'tenant'; // Default fallback
+    if (resident.is_resident) return 'resident';
+    return 'resident'; // Default fallback
   };
 
   const handleResidentStatusChange = (newStatus) => {
     const updates = { ...selectedResident };
     
     switch (newStatus) {
-      case 'tenant':
+      case 'resident':
         updates.is_resident = true;
         updates.is_owner = false;
         break;
@@ -288,8 +285,6 @@ const AdminResidents = () => {
 
   // Enhanced handleEditResident to load vehicles
   const handleEditResidentWithVehicles = (resident) => {
-    console.log('=== EDIT RESIDENT CLICKED ===');
-    console.log('Resident data:', resident);
     setSelectedResident({ ...resident });
     setEditDialogOpen(true);
     setMessage({ type: '', text: '' });
@@ -297,7 +292,6 @@ const AdminResidents = () => {
     if (resident.user_id && resident.is_resident) {
       loadVehicles(resident.user_id);
     }
-    console.log('Dialog should be opening...');
   };
 
   if (loading) {
@@ -615,7 +609,7 @@ const AdminResidents = () => {
                     onChange={(e) => handleResidentStatusChange(e.target.value)}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 pl-10 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   >
-                    <option value="tenant">Tenant</option>
+                    <option value="resident">Resident</option>
                     <option value="owner">Property Owner</option>
                     <option value="owner-resident">Owner-Resident</option>
                   </select>

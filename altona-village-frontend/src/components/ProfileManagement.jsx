@@ -37,14 +37,9 @@ const ProfileManagement = () => {
 
   const fetchProfile = async () => {
     try {
-      console.log('=== INITIAL PROFILE FETCH ===');
       const response = await authAPI.getProfile();
-      console.log('Initial profile response:', response);
-      console.log('Initial profile data:', response.data);
       setProfile(response.data);
     } catch (error) {
-      console.error('=== INITIAL PROFILE FETCH ERROR ===');
-      console.error('Error:', error);
       setMessage({ type: 'error', text: 'Failed to load profile information' });
     }
   };
@@ -55,54 +50,28 @@ const ProfileManagement = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      console.log('=== PROFILE UPDATE START ===');
-      console.log('Sending profile update:', profile);
-      console.log('API call starting...');
-      
       const result = await updateUserProfile(profile);
-      
-      console.log('=== AUTH CONTEXT RESPONSE ===');
-      console.log('Update result:', result);
       
       if (result.success) {
         setMessage({ type: 'success', text: 'Profile updated successfully' });
         
         // Refresh the profile form data from the server
         try {
-          console.log('=== ATTEMPTING TO REFRESH PROFILE ===');
           const response = await authAPI.getProfile();
-          console.log('=== REFRESHED PROFILE DATA ===');
-          console.log('Full response:', response);
-          console.log('Response status:', response.status);
-          console.log('Response data:', response.data);
-          console.log('Response data type:', typeof response.data);
           
           if (response.data) {
             setProfile(response.data);
-            console.log('=== PROFILE STATE UPDATED ===');
             
             // Also refresh the user context
             await refreshUser();
-          } else {
-            console.log('=== NO DATA IN RESPONSE ===');
           }
         } catch (refreshError) {
-          console.error('=== REFRESH ERROR ===');
-          console.error('Failed to refresh profile data:', refreshError);
-          console.error('Error response:', refreshError.response);
-          console.error('Error status:', refreshError.response?.status);
-          console.error('Error data:', refreshError.response?.data);
           // Still show success since the update worked
         }
-        
-        console.log('=== PROFILE UPDATE SUCCESS ===');
       } else {
         throw new Error(result.error);
       }
     } catch (error) {
-      console.log('=== PROFILE UPDATE ERROR ===');
-      console.error('Profile update error:', error);
-      console.error('Error message:', error.message);
       
       setMessage({ 
         type: 'error', 

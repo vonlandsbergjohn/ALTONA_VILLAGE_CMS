@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
-from src.models.user import User, Resident, Owner, db
+from src.models.user import User, Resident, Owner, Vehicle, db
 from src.utils.email_service import send_registration_notification_to_admin
 from datetime import timedelta
 
@@ -311,48 +311,63 @@ def update_profile():
                     first_name = ''
                     last_name = ''
             
-            if (new_status == 'tenant' or new_status == 'resident') and not current_is_resident:
-                # Create new resident record
-                resident = Resident(
-                    user_id=user.id,
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone_number=data.get('phone_number', user.owner.phone_number if user.owner else ''),
-                    emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
-                    emergency_contact_number=data.get('emergency_contact_number', user.owner.emergency_contact_number if user.owner else ''),
-                    intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
-                    id_number=user.owner.id_number if user.owner and user.owner.id_number else 'TEMP_ID',  # Copy from owner or temp default
-                    erf_number=user.owner.erf_number if user.owner and user.owner.erf_number else 'TEMP_ERF',  # Copy from owner or temp default
-                    street_number=user.owner.street_number if user.owner else '',
-                    street_name=user.owner.street_name if user.owner else '',
-                    full_address=data.get('full_address', user.owner.full_address if user.owner else '')
-                )
-                db.session.add(resident)
+            # Handle different status changes
+            if new_status == 'tenant' or new_status == 'resident':
+                # Ensure resident record exists
+                if not current_is_resident:
+                    resident = Resident(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone_number', user.owner.phone_number if user.owner else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
+                        emergency_contact_number=data.get('emergency_contact_number', user.owner.emergency_contact_number if user.owner else ''),
+                        intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
+                        id_number=user.owner.id_number if user.owner and user.owner.id_number else 'TEMP_ID',
+                        erf_number=user.owner.erf_number if user.owner and user.owner.erf_number else 'TEMP_ERF',
+                        street_number=user.owner.street_number if user.owner else '',
+                        street_name=user.owner.street_name if user.owner else '',
+                        full_address=data.get('full_address', user.owner.full_address if user.owner else '')
+                    )
+                    db.session.add(resident)
                 
-                # If was only owner, remove owner record
+                # Remove owner record if changing to tenant/resident only
                 if current_is_owner:
+                    # Before deleting owner record, reassign any vehicles to the resident record
+                    old_owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
+                    for vehicle in old_owner_vehicles:
+                        vehicle.owner_id = None
+                        vehicle.resident_id = resident.id if not current_is_resident else user.resident.id
+                    
                     db.session.delete(user.owner)
             
-            elif new_status == 'owner' and not current_is_owner:
-                # Create new owner record
-                owner = Owner(
-                    user_id=user.id,
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone_number=data.get('phone_number', user.resident.phone_number if user.resident else ''),
-                    emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
-                    emergency_contact_number=data.get('emergency_contact_number', user.resident.emergency_contact_number if user.resident else ''),
-                    intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
-                    street_number=user.resident.street_number if user.resident else '',
-                    street_name=user.resident.street_name if user.resident else '',
-                    full_address=data.get('full_address', user.resident.full_address if user.resident else ''),
-                    id_number=user.resident.id_number if user.resident and user.resident.id_number else 'TEMP_ID',
-                    erf_number=user.resident.erf_number if user.resident and user.resident.erf_number else 'TEMP_ERF'
-                )
-                db.session.add(owner)
+            elif new_status == 'owner':
+                # Ensure owner record exists
+                if not current_is_owner:
+                    owner = Owner(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone_number', user.resident.phone_number if user.resident else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
+                        emergency_contact_number=data.get('emergency_contact_number', user.resident.emergency_contact_number if user.resident else ''),
+                        intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
+                        street_number=user.resident.street_number if user.resident else '',
+                        street_name=user.resident.street_name if user.resident else '',
+                        full_address=data.get('full_address', user.resident.full_address if user.resident else ''),
+                        id_number=user.resident.id_number if user.resident and user.resident.id_number else 'TEMP_ID',
+                        erf_number=user.resident.erf_number if user.resident and user.resident.erf_number else 'TEMP_ERF'
+                    )
+                    db.session.add(owner)
                 
-                # If was only resident, remove resident record
+                # Remove resident record if changing to owner only
                 if current_is_resident:
+                    # Before deleting resident record, reassign any vehicles to the owner record  
+                    old_resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
+                    for vehicle in old_resident_vehicles:
+                        vehicle.resident_id = None
+                        vehicle.owner_id = owner.id if not current_is_owner else user.owner.id
+                    
                     db.session.delete(user.resident)
             
             elif new_status == 'owner-resident':

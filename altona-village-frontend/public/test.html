@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test Page</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; }
+        button { margin: 5px; padding: 10px; }
+        .result { margin: 10px 0; padding: 10px; background: #f0f0f0; white-space: pre-wrap; }
+        .error { background: #ffe6e6; }
+        .success { background: #e6ffe6; }
+    </style>
+</head>
+<body>
+    <h1>API Test Page</h1>
+    
+    <div class="test-section">
+        <h2>Authentication</h2>
+        <button onclick="testUserLogin()">Test User Login</button>
+        <button onclick="testAdminLogin()">Test Admin Login</button>
+        <div id="auth-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Profile Management</h2>
+        <button onclick="testGetProfile()">Get Profile</button>
+        <button onclick="testUpdateProfileTenant()">Update Profile (Tenant)</button>
+        <button onclick="testUpdateProfileOwner()">Update Profile (Owner)</button>
+        <div id="profile-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Admin Functions</h2>
+        <button onclick="testGetResidents()">Get Residents</button>
+        <button onclick="testUpdateResidentStatus()">Update Resident Status</button>
+        <div id="admin-result" class="result"></div>
+    </div>
+
+    <script>
+        let userToken = null;
+        let adminToken = null;
+        let residents = [];
+
+        function log(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            element.textContent = JSON.stringify(message, null, 2);
+            element.className = isError ? 'result error' : 'result success';
+        }
+
+        async function testUserLogin() {
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'marilizevl@gmail.com', password: 'test' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.access_token) {
+                    userToken = data.access_token;
+                    log('auth-result', { success: true, message: 'User login successful', user: data.user });
+                } else {
+                    log('auth-result', { error: 'User login failed', data }, true);
+                }
+            } catch (error) {
+                log('auth-result', { error: 'User login error', message: error.message }, true);
+            }
+        }
+
+        async function testAdminLogin() {
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'vonlandsbergjohn@gmail.com', password: 'dGdFHLCJxx44ykq' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.access_token) {
+                    adminToken = data.access_token;
+                    log('auth-result', { success: true, message: 'Admin login successful', user: data.user });
+                } else {
+                    log('auth-result', { error: 'Admin login failed', data }, true);
+                }
+            } catch (error) {
+                log('auth-result', { error: 'Admin login error', message: error.message }, true);
+            }
+        }
+
+        async function testGetProfile() {
+            if (!userToken) {
+                log('profile-result', { error: 'Please login as user first' }, true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/profile', {
+                    headers: { 'Authorization': `Bearer ${userToken}` }
+                });
+                
+                const data = await response.json();
+                log('profile-result', { status: response.status, data });
+            } catch (error) {
+                log('profile-result', { error: 'Get profile error', message: error.message }, true);
+            }
+        }
+
+        async function testUpdateProfileTenant() {
+            if (!userToken) {
+                log('profile-result', { error: 'Please login as user first' }, true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/profile', {
+                    method: 'PUT',
+                    headers: { 
+                        'Authorization': `Bearer ${userToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tenant_or_owner: 'tenant'
+                    })
+                });
+                
+                const data = await response.json();
+                log('profile-result', { 
+                    action: 'Update to Tenant',
+                    status: response.status, 
+                    ok: response.ok,
+                    data 
+                });
+            } catch (error) {
+                log('profile-result', { error: 'Update profile error', message: error.message }, true);
+            }
+        }
+
+        async function testUpdateProfileOwner() {
+            if (!userToken) {
+                log('profile-result', { error: 'Please login as user first' }, true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/profile', {
+                    method: 'PUT',
+                    headers: { 
+                        'Authorization': `Bearer ${userToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        tenant_or_owner: 'owner'
+                    })
+                });
+                
+                const data = await response.json();
+                log('profile-result', { 
+                    action: 'Update to Owner',
+                    status: response.status, 
+                    ok: response.ok,
+                    data 
+                });
+            } catch (error) {
+                log('profile-result', { error: 'Update profile error', message: error.message }, true);
+            }
+        }
+
+        async function testGetResidents() {
+            if (!adminToken) {
+                log('admin-result', { error: 'Please login as admin first' }, true);
+                return;
+            }
+
+            try {
+                const response = await fetch('http://localhost:5000/api/admin/residents', {
+                    headers: { 'Authorization': `Bearer ${adminToken}` }
+                });
+                
+                const data = await response.json();
+                residents = data;
+                log('admin-result', { 
+                    action: 'Get Residents',
+                    status: response.status, 
+                    count: Array.isArray(data) ? data.length : 0,
+                    data 
+                });
+            } catch (error) {
+                log('admin-result', { error: 'Get residents error', message: error.message }, true);
+            }
+        }
+
+        async function testUpdateResidentStatus() {
+            if (!adminToken) {
+                log('admin-result', { error: 'Please login as admin first' }, true);
+                return;
+            }
+
+            if (residents.length === 0) {
+                log('admin-result', { error: 'Please get residents first' }, true);
+                return;
+            }
+
+            try {
+                const userId = residents[0].user_id;
+                const response = await fetch(`http://localhost:5000/api/admin/residents/${userId}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Authorization': `Bearer ${adminToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        resident_status_change: 'owner'
+                    })
+                });
+                
+                const data = await response.json();
+                log('admin-result', { 
+                    action: 'Update Resident Status',
+                    userId: userId,
+                    status: response.status, 
+                    ok: response.ok,
+                    data 
+                });
+            } catch (error) {
+                log('admin-result', { error: 'Update resident error', message: error.message }, true);
+            }
+        }
+    </script>
+</body>
+</html>
