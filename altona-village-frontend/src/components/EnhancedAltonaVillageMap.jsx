@@ -8,17 +8,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { X, ZoomIn, ZoomOut, RotateCcw, MapPin, Search, FileImage, FileText } from 'lucide-react';
 import { MAP_CONFIG, PROPERTY_DATA, searchProperties } from '@/data/mapData';
 
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+// Set up PDF.js worker with fallback
+if (typeof window !== 'undefined') {
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+}
 
 const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
   const [zoom, setZoom] = useState(MAP_CONFIG.defaultZoom);
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredProperties, setFilteredProperties] = useState(PROPERTY_DATA);
-  const [mapType, setMapType] = useState('image'); // 'image' or 'pdf'
+  const [mapType, setMapType] = useState('image'); // Default to image mode
   const [numPages, setNumPages] = useState(null);
   const [pdfError, setPdfError] = useState(false);
+  
+  // Pan/drag state
+  const [panPosition, setPanPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const properties = filteredProperties;
 
@@ -30,9 +37,9 @@ const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
 
   const onDocumentLoadError = useCallback((error) => {
     console.error('Error loading PDF:', error);
+    console.log('PDF file should be at: public/images/altona-village-map.pdf');
     setPdfError(true);
-    // Fallback to image mode
-    setMapType('image');
+    // Don't automatically fallback - let user see the error
   }, []);
 
   const handlePropertyClick = (property) => {
@@ -50,11 +57,37 @@ const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
 
   const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.2, MAP_CONFIG.maxZoom));
   const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.2, MAP_CONFIG.minZoom));
-  const handleResetZoom = () => setZoom(MAP_CONFIG.defaultZoom);
+  const handleResetZoom = () => {
+    setZoom(MAP_CONFIG.defaultZoom);
+    setPanPosition({ x: 0, y: 0 }); // Reset pan position when resetting zoom
+  };
+
+  // Pan/drag handlers
+  const handleMouseDown = (e) => {
+    setIsDragging(true);
+    setDragStart({
+      x: e.clientX - panPosition.x,
+      y: e.clientY - panPosition.y
+    });
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    
+    setPanPosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
 
   const handleMapTypeChange = (type) => {
     setMapType(type);
     setZoom(MAP_CONFIG.defaultZoom); // Reset zoom when switching map types
+    setPanPosition({ x: 0, y: 0 }); // Reset pan position when switching map types
   };
 
   return (
@@ -103,16 +136,16 @@ const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="image">
-                      <div className="flex items-center gap-2">
-                        <FileImage className="w-4 h-4" />
-                        Image
-                      </div>
-                    </SelectItem>
                     <SelectItem value="pdf">
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4" />
                         PDF
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="image">
+                      <div className="flex items-center gap-2">
+                        <FileImage className="w-4 h-4" />
+                        Image
                       </div>
                     </SelectItem>
                   </SelectContent>
@@ -137,25 +170,42 @@ const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
         <CardContent className="p-0 h-full">
           {/* Map Controls */}
           <div className="absolute top-32 right-4 z-10 flex flex-col gap-2">
-            <Button variant="outline" size="sm" onClick={handleZoomIn}>
+            <Button variant="outline" size="sm" onClick={handleZoomIn} title="Zoom In">
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={handleZoomOut}>
+            <Button variant="outline" size="sm" onClick={handleZoomOut} title="Zoom Out">
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="sm" onClick={handleResetZoom}>
+            <Button variant="outline" size="sm" onClick={handleResetZoom} title="Reset Zoom & Position">
               <RotateCcw className="w-4 h-4" />
             </Button>
+            {/* Drag Help */}
+            <div className="bg-white bg-opacity-90 text-xs p-2 rounded border shadow-sm max-w-32 text-center">
+              <p className="font-medium text-gray-700">💡 Tip</p>
+              <p className="text-gray-600">Click & drag to pan the map</p>
+            </div>
           </div>
 
           {/* Map Container */}
-          <div className="relative h-full overflow-hidden" style={{ backgroundColor: MAP_CONFIG.backgroundColor }}>
+          <div 
+            className="relative h-full overflow-hidden" 
+            style={{ backgroundColor: MAP_CONFIG.backgroundColor }}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp} // Stop dragging if mouse leaves container
+          >
             <div 
-              className="relative w-full h-full transition-transform duration-300 flex items-center justify-center"
-              style={{ transform: `scale(${zoom})` }}
+              className={`relative w-full h-full transition-transform duration-300 flex items-center justify-center ${
+                isDragging ? 'cursor-grabbing' : 'cursor-grab'
+              }`}
+              style={{ 
+                transform: `scale(${zoom}) translate(${panPosition.x}px, ${panPosition.y}px)` 
+              }}
+              onMouseDown={handleMouseDown}
+              draggable={false} // Prevent default drag behavior
             >
               {/* PDF Map Rendering */}
-              {mapType === 'pdf' && (
+              {mapType === 'pdf' && !pdfError && (
                 <div className="relative">
                   <Document
                     file="/images/altona-village-map.pdf"
@@ -166,6 +216,16 @@ const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
                         <div className="text-center">
                           <FileText className="w-12 h-12 mx-auto mb-2 text-blue-600 animate-pulse" />
                           <p>Loading PDF map...</p>
+                        </div>
+                      </div>
+                    }
+                    error={
+                      <div className="flex items-center justify-center p-8">
+                        <div className="text-center text-red-600">
+                          <FileText className="w-12 h-12 mx-auto mb-2" />
+                          <p className="font-medium">Unable to load PDF map</p>
+                          <p className="text-sm text-gray-600 mt-1">Switched to image mode</p>
+                          <p className="text-xs text-gray-500 mt-2">Place PDF at: public/images/altona-village-map.pdf</p>
                         </div>
                       </div>
                     }
@@ -205,10 +265,44 @@ const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
                 </div>
               )}
 
+              {/* PDF Error State */}
+              {mapType === 'pdf' && pdfError && (
+                <div className="w-full h-full relative bg-gradient-to-br from-red-50 to-red-100">
+                  <div className="absolute inset-0 flex items-center justify-center text-red-600">
+                    <div className="text-center">
+                      <FileText className="w-16 h-16 mx-auto mb-4 text-red-500" />
+                      <p className="text-lg font-semibold">Unable to load PDF map</p>
+                      <p className="text-sm mb-2">Switched to image mode</p>
+                      <code className="text-xs bg-red-200 px-2 py-1 rounded">
+                        Place PDF at: public/images/altona-village-map.pdf
+                      </code>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Image Map Rendering */}
-              {mapType === 'image' && (
+              {(mapType === 'image' || pdfError) && (
                 <div className="w-full h-full relative">
-                  {/* Check if image exists, otherwise show placeholder */}
+                  {/* Try to load the actual map image */}
+                  <img 
+                    src="/images/altona-village-map.jpg"
+                    alt="Altona Village Estate Map"
+                    className="w-full h-full object-contain"
+                    onError={(e) => {
+                      // If image fails to load, show placeholder
+                      console.error('Failed to load map image:', e.target.src);
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'block';
+                    }}
+                    onLoad={(e) => {
+                      // Hide placeholder when image loads successfully
+                      console.log('Map image loaded successfully:', e.target.src);
+                      e.target.nextSibling.style.display = 'none';
+                    }}
+                  />
+                  
+                  {/* Fallback placeholder - shown if image doesn't exist */}
                   <div className="w-full h-full bg-gradient-to-br from-green-200 to-green-300 relative">
                     <div className="absolute inset-0 flex items-center justify-center text-gray-600">
                       <div className="text-center">
@@ -224,18 +318,6 @@ const EnhancedAltonaVillageMap = ({ onErfSelect, selectedErf, onClose }) => {
                       </div>
                     </div>
                   </div>
-
-                  {/* Uncomment this when you have your map image ready */}
-                  {/* 
-                  <img 
-                    src={MAP_CONFIG.mapImage.src}
-                    alt={MAP_CONFIG.mapImage.alt}
-                    className="w-full h-full object-contain"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                  */}
 
                   {/* Property Markers for Image */}
                   {properties.map((property) => (

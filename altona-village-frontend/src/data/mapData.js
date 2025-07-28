@@ -51,88 +51,19 @@ export const MAP_CONFIG = {
 
 // Property locations and details
 // Coordinates are in percentage (0-100) relative to the map image
+// Replace this demo data with your actual property data
 export const PROPERTY_DATA = [
-  {
-    erf: '5555',
-    street: '15 Coral Tree',
-    streetNumber: '15',
-    streetName: 'Coral Tree',
-    coordinates: { x: 20, y: 30 }, // X: 20% from left, Y: 30% from top
-    section: 'North Section',
-    notes: 'Corner property'
-  },
-  {
-    erf: '8888',
-    street: '88 Milkwood',
-    streetNumber: '88',
-    streetName: 'Milkwood',
-    coordinates: { x: 35, y: 25 },
-    section: 'Central Section',
-    notes: ''
-  },
-  {
-    erf: '4562',
-    street: '40 Rosewood',
-    streetNumber: '40',
-    streetName: 'Rosewood',
-    coordinates: { x: 50, y: 40 },
-    section: 'East Section',
-    notes: 'Near community center'
-  },
-  {
-    erf: '4568',
-    street: '10 Sagewood',
-    streetNumber: '10',
-    streetName: 'Sagewood',
-    coordinates: { x: 25, y: 55 },
-    section: 'South Section',
-    notes: ''
-  },
-  {
-    erf: '27727',
-    street: '33 Yellowwood Crescent',
-    streetNumber: '33',
-    streetName: 'Yellowwood Crescent',
-    coordinates: { x: 60, y: 35 },
-    section: 'East Section',
-    notes: 'Crescent property'
-  },
-  {
-    erf: '1234',
-    street: '25 Baobab Avenue',
-    streetNumber: '25',
-    streetName: 'Baobab Avenue',
-    coordinates: { x: 75, y: 50 },
-    section: 'East Section',
-    notes: 'Main avenue'
-  },
-  {
-    erf: '5678',
-    street: '12 Marula Street',
-    streetNumber: '12',
-    streetName: 'Marula Street',
-    coordinates: { x: 40, y: 65 },
-    section: 'South Section',
-    notes: ''
-  },
-  {
-    erf: '9999',
-    street: '78 Kiaat Close',
-    streetNumber: '78',
-    streetName: 'Kiaat Close',
-    coordinates: { x: 80, y: 20 },
-    section: 'North Section',
-    notes: 'Cul-de-sac'
-  }
-  
-  // Add more properties here as needed
-  // To add a new property:
-  // 1. Get the ERF number
-  // 2. Get the full street address
-  // 3. Determine coordinates by looking at your map image:
-  //    - x: percentage from left edge (0-100)
-  //    - y: percentage from top edge (0-100)
-  // 4. Add any additional notes
+  // Add your actual property data here when available
+  // Example format:
+  // {
+  //   erf: '1234',
+  //   street: '123 Street Name',
+  //   streetNumber: '123',
+  //   streetName: 'Street Name',
+  //   coordinates: { x: 50, y: 50 }, // X: 50% from left, Y: 50% from top
+  //   section: 'Section Name',
+  //   notes: 'Any additional notes'
+  // }
 ];
 
 // Search functionality
