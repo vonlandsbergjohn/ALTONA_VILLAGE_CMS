@@ -341,6 +341,7 @@ def update_resident(user_id):
                         full_address=data.get('property_address', user.owner.full_address if user.owner else '')
                     )
                     db.session.add(resident)
+                    db.session.flush()  # Flush to get the resident.id
                 
                 # Remove owner record if changing to tenant/resident only
                 if current_is_owner:
@@ -348,7 +349,9 @@ def update_resident(user_id):
                     old_owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
                     for vehicle in old_owner_vehicles:
                         vehicle.owner_id = None
-                        vehicle.resident_id = resident.id if not current_is_resident else user.resident.id
+                        # Use the correct resident ID - either newly created or existing
+                        target_resident_id = resident.id if not current_is_resident else user.resident.id
+                        vehicle.resident_id = target_resident_id
                     
                     db.session.delete(user.owner)
             
@@ -370,6 +373,7 @@ def update_resident(user_id):
                         full_address=data.get('property_address', user.resident.full_address if user.resident else '')
                     )
                     db.session.add(owner)
+                    db.session.flush()  # Flush to get the owner.id
                 
                 # Remove resident record if changing to owner only
                 if current_is_resident:
@@ -377,7 +381,9 @@ def update_resident(user_id):
                     old_resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
                     for vehicle in old_resident_vehicles:
                         vehicle.resident_id = None
-                        vehicle.owner_id = owner.id if not current_is_owner else user.owner.id
+                        # Use the correct owner ID - either newly created or existing
+                        target_owner_id = owner.id if not current_is_owner else user.owner.id
+                        vehicle.owner_id = target_owner_id
                     
                     db.session.delete(user.resident)
             
@@ -416,6 +422,9 @@ def update_resident(user_id):
                         full_address=data.get('property_address', user.resident.full_address if user.resident else '')
                     )
                     db.session.add(owner)
+                
+                # For owner-resident status, vehicles can be associated with either record
+                # We'll keep them as they are but ensure they show up in queries
         
         user.updated_at = datetime.utcnow()
         db.session.commit()
@@ -626,46 +635,67 @@ def get_gate_register():
         return admin_check
     
     try:
-        # Get vehicles from both residents and owners
-        resident_vehicles = Vehicle.query.join(Resident).join(User).filter(User.status == 'active').all()
-        owner_vehicles = Vehicle.query.join(Owner).join(User).filter(User.status == 'active').all()
-        
+        # Use similar logic to the export function to ensure consistency
+        active_users = User.query.filter_by(status='active').all()
         result = []
         
-        # Add resident vehicles
-        for vehicle in resident_vehicles:
-            vehicle_data = vehicle.to_dict()
-            if vehicle.resident:
-                vehicle_data['resident'] = vehicle.resident.to_dict()
-                
-                # Add property information
-                if hasattr(vehicle.resident, 'properties') and vehicle.resident.properties:
-                    vehicle_data['property'] = vehicle.resident.properties[0].to_dict()
-                else:
-                    vehicle_data['property'] = None
-            else:
-                vehicle_data['resident'] = None
-                vehicle_data['property'] = None
+        for user in active_users:
+            if user.role == 'admin':
+                continue
             
-            result.append(vehicle_data)
+            resident_data = None
+            owner_data = None
+            status = 'Unknown'
+            
+            # Determine user status and get appropriate data
+            if user.resident and user.owner:
+                status = 'Owner-Resident'
+                resident_data = user.resident
+                owner_data = user.owner
+            elif user.resident:
+                status = 'Resident'
+                resident_data = user.resident
+            elif user.owner:
+                status = 'Non-Resident Owner'
+                owner_data = user.owner
+            
+            primary_data = resident_data if resident_data else owner_data
+            
+            if not primary_data:
+                continue
+            
+            # Get vehicle registrations for this user
+            vehicle_registrations = []
+            if resident_data:
+                vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            elif owner_data:
+                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            
+            # Create entry with all user information and their vehicles
+            entry = {
+                'user_id': user.id,
+                'resident_status': status,
+                'first_name': primary_data.first_name or '',
+                'last_name': primary_data.last_name or '',
+                'surname': primary_data.last_name or '',  # For compatibility
+                'street_number': primary_data.street_number or '',
+                'street_name': primary_data.street_name or '',
+                'full_address': primary_data.full_address or '',
+                'erf_number': primary_data.erf_number or '',
+                'intercom_code': primary_data.intercom_code or '',
+                'phone_number': primary_data.phone_number or '',
+                'vehicle_registrations': vehicle_registrations,
+                'total_vehicles': len(vehicle_registrations),
+                'email': user.email,
+                'sort_key': (primary_data.street_name or '').upper()
+            }
+            
+            result.append(entry)
         
-        # Add owner vehicles
-        for vehicle in owner_vehicles:
-            vehicle_data = vehicle.to_dict()
-            if vehicle.owner:
-                # For owner vehicles, we'll use the owner info as 'resident' for consistency
-                vehicle_data['resident'] = vehicle.owner.to_dict()
-                
-                # Add property information (owners have 'owned_properties' not 'properties')
-                if hasattr(vehicle.owner, 'owned_properties') and vehicle.owner.owned_properties:
-                    vehicle_data['property'] = vehicle.owner.owned_properties[0].to_dict()
-                else:
-                    vehicle_data['property'] = None
-            else:
-                vehicle_data['resident'] = None
-                vehicle_data['property'] = None
-            
-            result.append(vehicle_data)
+        # Sort by street name alphabetically (same as export)
+        result.sort(key=lambda x: x['sort_key'])
         
         return jsonify({
             'success': True,
