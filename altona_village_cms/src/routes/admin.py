@@ -616,23 +616,35 @@ def get_gate_register():
         # Add resident vehicles
         for vehicle in resident_vehicles:
             vehicle_data = vehicle.to_dict()
-            vehicle_data['resident'] = vehicle.resident.to_dict()
-            
-            # Add property information
-            if vehicle.resident.properties:
-                vehicle_data['property'] = vehicle.resident.properties[0].to_dict()
+            if vehicle.resident:
+                vehicle_data['resident'] = vehicle.resident.to_dict()
+                
+                # Add property information
+                if hasattr(vehicle.resident, 'properties') and vehicle.resident.properties:
+                    vehicle_data['property'] = vehicle.resident.properties[0].to_dict()
+                else:
+                    vehicle_data['property'] = None
+            else:
+                vehicle_data['resident'] = None
+                vehicle_data['property'] = None
             
             result.append(vehicle_data)
         
         # Add owner vehicles
         for vehicle in owner_vehicles:
             vehicle_data = vehicle.to_dict()
-            # For owner vehicles, we'll use the owner info as 'resident' for consistency
-            vehicle_data['resident'] = vehicle.owner.to_dict()
-            
-            # Add property information (owners have 'owned_properties' not 'properties')
-            if vehicle.owner.owned_properties:
-                vehicle_data['property'] = vehicle.owner.owned_properties[0].to_dict()
+            if vehicle.owner:
+                # For owner vehicles, we'll use the owner info as 'resident' for consistency
+                vehicle_data['resident'] = vehicle.owner.to_dict()
+                
+                # Add property information (owners have 'owned_properties' not 'properties')
+                if hasattr(vehicle.owner, 'owned_properties') and vehicle.owner.owned_properties:
+                    vehicle_data['property'] = vehicle.owner.owned_properties[0].to_dict()
+                else:
+                    vehicle_data['property'] = None
+            else:
+                vehicle_data['resident'] = None
+                vehicle_data['property'] = None
             
             result.append(vehicle_data)
         
@@ -970,8 +982,8 @@ def get_resident_vehicles(user_id):
             resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
             vehicles.extend([vehicle.to_dict() for vehicle in resident_vehicles])
         
-        # Get vehicles from owner data (for owner-only users)
-        if user.owner and not user.resident:
+        # Get vehicles from owner data (for all users who have owner records)
+        if user.owner:
             owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
             vehicles.extend([vehicle.to_dict() for vehicle in owner_vehicles])
         
