@@ -64,6 +64,20 @@ The minimum system requirements are deliberately modest to ensure accessibility 
 
 New residents begin their journey with the Altona Village Community Management System through a straightforward registration process. This process is designed to be intuitive while ensuring that all necessary information is collected for proper account setup and verification.
 
+**Email Address Requirements:**
+You can register with ANY email address from ANY email provider worldwide. The system works with:
+- Gmail, Yahoo, Outlook/Hotmail
+- Company email addresses  
+- Private domain emails
+- International email providers
+- Mobile carrier email services
+
+**Important Email Setup Tips:**
+- Use an email address you check regularly
+- Ensure your spam filters won't block automated messages
+- Consider adding vonlandsbergjohn@gmail.com to your contacts during registration
+- If using a company email, check with IT about external email policies
+
 To initiate registration, residents visit the system's login page and select the "Register here" option. The registration form requests essential information including full name, email address, phone number, and emergency contact details. Residents must also specify whether they are property owners or tenants, as this designation affects certain system permissions and communications.
 
 The registration process includes several validation steps to ensure data accuracy and completeness. Email addresses are verified to prevent typos that could result in missed communications, while phone numbers are validated to ensure they follow the correct format for South African mobile numbers. The system also checks for duplicate registrations to prevent multiple accounts for the same resident.
@@ -343,6 +357,55 @@ Data validation errors may occur when users enter information that doesn't meet 
 
 Backup and recovery procedures ensure that user data is protected against loss, but users should be aware that recent changes may not be immediately backed up and should avoid making critical changes during known system maintenance periods.
 
+### Email Delivery and Provider Compatibility
+
+The Altona Village CMS email system is designed to work with all email providers worldwide, but different providers have varying spam filtering policies that can affect email delivery. Understanding these differences helps residents ensure they receive important communications.
+
+**Universal Email Compatibility:**
+The system uses Gmail SMTP servers to send emails, which means it can successfully send messages to any email address regardless of the recipient's email provider. This includes:
+
+- **Gmail addresses** - Excellent delivery rates, usually go to inbox
+- **Yahoo Mail** - Good delivery but often filtered to spam initially  
+- **Outlook/Hotmail** - Generally good delivery, occasionally goes to junk
+- **Company email addresses** - Delivery depends on company security policies
+- **Private domain emails** - Usually excellent delivery rates
+- **International providers** - Works with providers in any country
+- **Mobile carrier emails** - Compatible with all mobile provider email services
+
+**Common Delivery Issues by Provider:**
+
+*Gmail to Gmail:* Messages typically arrive in the inbox immediately with no issues.
+
+*Gmail to Yahoo:* Yahoo Mail has aggressive spam filtering. Emails often go to the "Spam" or "Bulk Mail" folder initially. After marking several emails as "Not Spam," future emails usually arrive in the inbox.
+
+*Gmail to Outlook/Hotmail:* Generally good delivery, but some messages may go to the "Junk Email" folder. Adding the sender to contacts usually resolves this.
+
+*Gmail to Company Email:* Delivery depends on the company's email security policies. Some organizations block external automated emails. Contact your IT department if you're not receiving emails.
+
+*Gmail to Private Domains:* Usually excellent delivery rates as private domains often have less aggressive spam filtering.
+
+**Troubleshooting Email Delivery:**
+
+1. **Check All Folders:** Always check spam, junk, bulk, and trash folders
+2. **Add to Contacts:** Add vonlandsbergjohn@gmail.com to your address book
+3. **Mark as Safe:** When you find emails in spam, mark them as "Not Spam"
+4. **Whitelist the Domain:** Add our domain to your email provider's safe senders list
+5. **Check Email Settings:** Ensure your email client isn't blocking automated messages
+6. **Contact Your Provider:** For persistent issues, contact your email provider's support
+
+**For Company/Corporate Email Users:**
+If you use a company email address and aren't receiving notifications:
+- Contact your IT department about whitelisting vonlandsbergjohn@gmail.com
+- Ask about external email policies that might block automated messages
+- Consider using a personal email address as a backup contact method
+- Check if your company has a separate quarantine system for external emails
+
+**Testing Email Delivery:**
+Estate management can send test emails to verify your email address is working correctly. Contact the office if you suspect email delivery issues.
+
+**Important Note:**
+The system always shows emails as "sent successfully" when they leave our servers. If the database shows an email was sent but you didn't receive it, the issue is usually with spam filtering rather than system failure.
+
 ## Frequently Asked Questions
 
 ### Account Management
@@ -380,6 +443,30 @@ A: Communication preferences can be updated in your Profile section. You can cho
 
 **Q: Why am I not receiving email notifications?**
 A: Check your spam folder first, as some email systems may filter automated messages. If emails are going to spam, add the system's email address to your contacts. If you're still not receiving emails, verify that your email address is correct in your profile.
+
+**Q: Does the email system work with all email providers?**
+A: Yes! The Altona Village CMS email system works with ALL email providers worldwide, including:
+- Gmail (gmail.com) - Usually delivered to inbox
+- Yahoo Mail (yahoo.com) - May go to spam folder initially
+- Outlook/Hotmail (outlook.com, hotmail.com) - Usually delivered
+- Company email addresses (yourcompany.co.za) - Depends on company policies
+- Private domains (yourname.org) - Generally works well
+- International providers (any country) - Universal compatibility
+
+The system uses Gmail SMTP servers to send emails, but recipients can have ANY email address. If you don't receive emails, always check your spam/junk folder first.
+
+**Q: What should I do if emails go to my spam folder?**
+A: This is common, especially for Yahoo Mail users. To fix this:
+1. Check your spam/junk/bulk folders regularly
+2. Mark estate emails as "Not Spam" when you find them
+3. Add vonlandsbergjohn@gmail.com to your contacts or safe senders list
+4. For company emails, ask your IT department to whitelist our sending address
+
+**Q: Why don't the email links work on my mobile phone?**
+A: If email links work on your laptop but not on your mobile phone, this usually means the email contains a "localhost" URL that only works on the device running the server. The system should be configured with your network IP address (like http://192.168.0.23:5174) so that links work on all devices including mobile phones. Contact estate management to update the server configuration for mobile compatibility.
+
+**Q: Is the system mobile-friendly?**
+A: Yes! The Altona Village CMS is fully responsive and works perfectly on mobile phones, tablets, and laptops. You can access all features from any device with a web browser. If you're having trouble accessing the system from your phone, ensure you're using the correct URL and that both devices are on the same WiFi network.
 
 **Q: Can I opt out of community announcements?**
 A: You can opt out of non-essential communications, but you'll continue to receive critical safety, security, and emergency notifications. These cannot be disabled for your safety and security.

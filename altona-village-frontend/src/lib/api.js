@@ -46,6 +46,7 @@ export const adminAPI = {
   approveRegistration: (userId) => api.post(`/admin/approve-registration/${userId}`),
   rejectRegistration: (userId) => api.post(`/admin/reject-registration/${userId}`),
   getAllResidents: () => api.get('/admin/residents'),
+  updateResident: (userId, data) => api.put(`/admin/residents/${userId}`, data),
   getAllProperties: () => api.get('/admin/properties'),
   createProperty: (data) => api.post('/admin/properties', data),
   createBuilder: (data) => api.post('/admin/builders', data),
@@ -53,6 +54,12 @@ export const adminAPI = {
   getAllComplaints: () => api.get('/admin/complaints'),
   updateComplaint: (complaintId, data) => api.post(`/admin/complaints/${complaintId}/update`, data),
   getGateRegister: () => api.get('/admin/gate-register'),
+  exportGateRegister: () => api.get('/admin/gate-register/export', { responseType: 'blob' }),
+  // Admin Vehicle Management
+  getResidentVehicles: (userId) => api.get(`/admin/residents/${userId}/vehicles`),
+  addResidentVehicle: (userId, data) => api.post(`/admin/residents/${userId}/vehicles`, data),
+  updateResidentVehicle: (userId, vehicleId, data) => api.put(`/admin/residents/${userId}/vehicles/${vehicleId}`, data),
+  deleteResidentVehicle: (userId, vehicleId) => api.delete(`/admin/residents/${userId}/vehicles/${vehicleId}`),
   getResidentEmails: () => api.get('/admin/communication/emails'),
   getResidentPhones: () => api.get('/admin/communication/phones'),
 };

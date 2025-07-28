@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAuth } from '@/lib/auth.jsx';
+import { useAuth, getUserResidencyType } from '@/lib/auth.jsx';
 import { Button } from '@/components/ui/button';
 import { 
   Home, 
@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   Shield,
-  User
+  User,
+  Clock
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -23,9 +24,9 @@ const Layout = ({ children }) => {
     { icon: Home, label: 'Dashboard', path: '/admin' },
     { icon: Users, label: 'Residents', path: '/admin/residents' },
     { icon: Building, label: 'Properties', path: '/admin/properties' },
-    { icon: Car, label: 'Gate Register', path: '/admin/gate-register' },
+    { icon: Shield, label: 'Gate Register', path: '/admin/gate-register' },
     { icon: MessageSquare, label: 'Complaints', path: '/admin/complaints' },
-    { icon: Shield, label: 'Pending Approvals', path: '/admin/pending' },
+    { icon: Clock, label: 'Pending Approvals', path: '/admin/pending' },
     { icon: Settings, label: 'Communication', path: '/admin/communication' },
   ];
 
@@ -90,7 +91,7 @@ const Layout = ({ children }) => {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium text-gray-900">{user?.email}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role}</p>
+              <p className="text-xs text-gray-500">{getUserResidencyType(user)}</p>
             </div>
           </div>
           <Button

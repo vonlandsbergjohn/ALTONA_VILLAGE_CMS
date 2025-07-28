@@ -4,13 +4,20 @@ import Layout from '@/components/Layout';
 import LoginForm from '@/components/LoginForm';
 import RegisterForm from '@/components/RegisterForm';
 import AdminDashboard from '@/components/AdminDashboard';
+import AdminComplaints from '@/components/AdminComplaints';
+import AdminResidents from '@/components/AdminResidents';
+import GateRegister from '@/components/GateRegister';
 import PendingRegistrations from './components/PendingRegistrations';
 import ResidentDashboard from '@/components/ResidentDashboard';
+import ProfileManagement from '@/components/ProfileManagement';
+import VehicleManagement from '@/components/VehicleManagement';
+import MyComplaints from '@/components/MyComplaints';
+import MyProperty from '@/components/MyProperty';
 import './App.css';
 
 // Simple router component
 const Router = () => {
-  const { user, loading, isAuthenticated, isAdmin, isResident } = useAuth();
+  const { user, loading, isAuthenticated, isAdmin, isResident, canAccessVehicles } = useAuth();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [showRegister, setShowRegister] = useState(false);
 
@@ -69,7 +76,7 @@ const Router = () => {
       if (isAdmin) {
         navigate('/admin');
         return <AdminDashboard />;
-      } else if (isResident) {
+      } else if (isResident || canAccessVehicles) {
         navigate('/resident');
         return <ResidentDashboard />;
       }
@@ -81,13 +88,13 @@ const Router = () => {
         case '/admin':
           return <AdminDashboard />;
         case '/admin/residents':
-          return <div>Residents Management (Coming Soon)</div>;
+          return <AdminResidents />;
         case '/admin/properties':
           return <div>Properties Management (Coming Soon)</div>;
         case '/admin/gate-register':
-          return <div>Gate Register (Coming Soon)</div>;
+          return <GateRegister />;
         case '/admin/complaints':
-          return <div>Complaints Management (Coming Soon)</div>;
+          return <AdminComplaints />;
         case '/admin/pending':
           return <PendingRegistrations />;
         case '/admin/communication':
@@ -97,19 +104,23 @@ const Router = () => {
       }
     }
 
-    // Resident routes
-    if (isResident) {
+    // Resident and Owner routes
+    if (isResident || canAccessVehicles) {
       switch (currentPath) {
         case '/resident':
           return <ResidentDashboard />;
         case '/resident/profile':
-          return <div>Profile Management (Coming Soon)</div>;
+          return <ProfileManagement />;
         case '/resident/property':
-          return <div>My Property (Coming Soon)</div>;
+          return <MyProperty />;
         case '/resident/vehicles':
-          return <div>Vehicle Management (Coming Soon)</div>;
+          // Allow both residents and owners to access vehicles
+          if (canAccessVehicles) {
+            return <VehicleManagement />;
+          }
+          break;
         case '/resident/complaints':
-          return <div>My Complaints (Coming Soon)</div>;
+          return <MyComplaints />;
         default:
           return <ResidentDashboard />;
       }

@@ -1,9 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import text
 from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
 from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
+import csv
+import io
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -142,6 +144,16 @@ def get_all_residents():
                 'is_owner': user.owner is not None,
             }
             
+            # Add tenant_or_owner status
+            if user.resident and user.owner:
+                user_data['tenant_or_owner'] = 'owner-resident'
+            elif user.owner:
+                user_data['tenant_or_owner'] = 'owner'
+            elif user.resident:
+                user_data['tenant_or_owner'] = 'tenant'
+            else:
+                user_data['tenant_or_owner'] = ''
+            
             # Add resident data if available
             if user.resident:
                 resident = user.resident
@@ -270,9 +282,28 @@ def update_resident(user_id):
                 owner.street_name = street_name
                 owner.full_address = data['property_address']
         
-        # Handle resident status change (support both field names for compatibility)
+        # Handle resident status change (support both field names for compatibility)  
         if 'resident_status_change' in data or 'tenant_or_owner' in data:
             new_status = data.get('resident_status_change') or data.get('tenant_or_owner')
+            
+            # Map frontend status names to backend values
+            status_mapping = {
+                'Property Owner': 'owner',
+                'property owner': 'owner',
+                'Owner': 'owner',
+                'owner': 'owner',
+                'Tenant': 'tenant',
+                'tenant': 'tenant',
+                'Resident': 'tenant',
+                'resident': 'tenant',
+                'Owner-Resident': 'owner-resident',
+                'owner-resident': 'owner-resident',
+                'Property Owner-Resident': 'owner-resident'
+            }
+            
+            # Use mapped status or original if not found
+            new_status = status_mapping.get(new_status, new_status)
+            
             current_is_resident = user.resident is not None
             current_is_owner = user.owner is not None
             
@@ -293,48 +324,69 @@ def update_resident(user_id):
                     first_name = ''
                     last_name = ''
             
-            if (new_status == 'resident' or new_status == 'tenant') and not current_is_resident:
-                # Create new resident record
-                resident = Resident(
-                    user_id=user.id,
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone_number=data.get('phone', user.owner.phone_number if user.owner else ''),
-                    emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
-                    emergency_contact_number=data.get('emergency_contact_phone', user.owner.emergency_contact_number if user.owner else ''),
-                    intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
-                    id_number=user.owner.id_number if user.owner and user.owner.id_number else 'TEMP_ID',
-                    erf_number=user.owner.erf_number if user.owner and user.owner.erf_number else 'TEMP_ERF',
-                    street_number=user.owner.street_number if user.owner else '',
-                    street_name=user.owner.street_name if user.owner else '',
-                    full_address=data.get('property_address', user.owner.full_address if user.owner else '')
-                )
-                db.session.add(resident)
+            # Handle different status changes
+            if new_status == 'resident' or new_status == 'tenant':
+                # Ensure resident record exists
+                if not current_is_resident:
+                    resident = Resident(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone', user.owner.phone_number if user.owner else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.owner.emergency_contact_name if user.owner else ''),
+                        emergency_contact_number=data.get('emergency_contact_phone', user.owner.emergency_contact_number if user.owner else ''),
+                        intercom_code=data.get('intercom_code', user.owner.intercom_code if user.owner else ''),
+                        id_number=user.owner.id_number if user.owner and user.owner.id_number else 'TEMP_ID',
+                        erf_number=user.owner.erf_number if user.owner and user.owner.erf_number else 'TEMP_ERF',
+                        street_number=user.owner.street_number if user.owner else '',
+                        street_name=user.owner.street_name if user.owner else '',
+                        full_address=data.get('property_address', user.owner.full_address if user.owner else '')
+                    )
+                    db.session.add(resident)
+                    db.session.flush()  # Flush to get the resident.id
                 
-                # If was only owner, remove owner record
-                if current_is_owner and not current_is_resident:
+                # Remove owner record if changing to tenant/resident only
+                if current_is_owner:
+                    # Before deleting owner record, reassign any vehicles to the resident record
+                    old_owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
+                    for vehicle in old_owner_vehicles:
+                        vehicle.owner_id = None
+                        # Use the correct resident ID - either newly created or existing
+                        target_resident_id = resident.id if not current_is_resident else user.resident.id
+                        vehicle.resident_id = target_resident_id
+                    
                     db.session.delete(user.owner)
             
-            elif new_status == 'owner' and not current_is_owner:
-                # Create new owner record
-                owner = Owner(
-                    user_id=user.id,
-                    first_name=first_name,
-                    last_name=last_name,
-                    phone_number=data.get('phone', user.resident.phone_number if user.resident else ''),
-                    emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
-                    emergency_contact_number=data.get('emergency_contact_phone', user.resident.emergency_contact_number if user.resident else ''),
-                    intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
-                    id_number=user.resident.id_number if user.resident and user.resident.id_number else 'TEMP_ID',
-                    erf_number=user.resident.erf_number if user.resident and user.resident.erf_number else 'TEMP_ERF',
-                    street_number=user.resident.street_number if user.resident else '',
-                    street_name=user.resident.street_name if user.resident else '',
-                    full_address=data.get('property_address', user.resident.full_address if user.resident else '')
-                )
-                db.session.add(owner)
+            elif new_status == 'owner':
+                # Ensure owner record exists
+                if not current_is_owner:
+                    owner = Owner(
+                        user_id=user.id,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=data.get('phone', user.resident.phone_number if user.resident else ''),
+                        emergency_contact_name=data.get('emergency_contact_name', user.resident.emergency_contact_name if user.resident else ''),
+                        emergency_contact_number=data.get('emergency_contact_phone', user.resident.emergency_contact_number if user.resident else ''),
+                        intercom_code=data.get('intercom_code', user.resident.intercom_code if user.resident else ''),
+                        id_number=user.resident.id_number if user.resident and user.resident.id_number else 'TEMP_ID',
+                        erf_number=user.resident.erf_number if user.resident and user.resident.erf_number else 'TEMP_ERF',
+                        street_number=user.resident.street_number if user.resident else '',
+                        street_name=user.resident.street_name if user.resident else '',
+                        full_address=data.get('property_address', user.resident.full_address if user.resident else '')
+                    )
+                    db.session.add(owner)
+                    db.session.flush()  # Flush to get the owner.id
                 
-                # If was only resident, remove resident record
-                if current_is_resident and not current_is_owner:
+                # Remove resident record if changing to owner only
+                if current_is_resident:
+                    # Before deleting resident record, reassign any vehicles to the owner record  
+                    old_resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
+                    for vehicle in old_resident_vehicles:
+                        vehicle.resident_id = None
+                        # Use the correct owner ID - either newly created or existing
+                        target_owner_id = owner.id if not current_is_owner else user.owner.id
+                        vehicle.owner_id = target_owner_id
+                    
                     db.session.delete(user.resident)
             
             elif new_status == 'owner-resident':
@@ -372,6 +424,9 @@ def update_resident(user_id):
                         full_address=data.get('property_address', user.resident.full_address if user.resident else '')
                     )
                     db.session.add(owner)
+                
+                # For owner-resident status, vehicles can be associated with either record
+                # We'll keep them as they are but ensure they show up in queries
         
         user.updated_at = datetime.utcnow()
         db.session.commit()
@@ -582,23 +637,205 @@ def get_gate_register():
         return admin_check
     
     try:
-        vehicles = Vehicle.query.join(Resident).join(User).filter(User.status == 'active').all()
+        # Use similar logic to the export function to ensure consistency
+        active_users = User.query.filter_by(status='active').all()
         result = []
         
-        for vehicle in vehicles:
-            vehicle_data = vehicle.to_dict()
-            vehicle_data['resident'] = vehicle.resident.to_dict()
+        for user in active_users:
+            if user.role == 'admin':
+                continue
             
-            # Add property information
-            if vehicle.resident.properties:
-                vehicle_data['property'] = vehicle.resident.properties[0].to_dict()
+            resident_data = None
+            owner_data = None
+            status = 'Unknown'
             
-            result.append(vehicle_data)
+            # Determine user status and get appropriate data
+            if user.resident and user.owner:
+                status = 'Owner-Resident'
+                resident_data = user.resident
+                owner_data = user.owner
+            elif user.resident:
+                status = 'Resident'
+                resident_data = user.resident
+            elif user.owner:
+                status = 'Non-Resident Owner'
+                owner_data = user.owner
+            
+            primary_data = resident_data if resident_data else owner_data
+            
+            if not primary_data:
+                continue
+            
+            # Get vehicle registrations for this user
+            vehicle_registrations = []
+            if resident_data:
+                vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            elif owner_data:
+                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            
+            # Create entry with all user information and their vehicles
+            entry = {
+                'user_id': user.id,
+                'resident_status': status,
+                'first_name': primary_data.first_name or '',
+                'last_name': primary_data.last_name or '',
+                'surname': primary_data.last_name or '',  # For compatibility
+                'street_number': primary_data.street_number or '',
+                'street_name': primary_data.street_name or '',
+                'full_address': primary_data.full_address or '',
+                'erf_number': primary_data.erf_number or '',
+                'intercom_code': primary_data.intercom_code or '',
+                'phone_number': primary_data.phone_number or '',
+                'vehicle_registrations': vehicle_registrations,
+                'total_vehicles': len(vehicle_registrations),
+                'email': user.email,
+                'sort_key': (primary_data.street_name or '').upper()
+            }
+            
+            result.append(entry)
         
-        return jsonify(result), 200
+        # Sort by street name alphabetically (same as export)
+        result.sort(key=lambda x: x['sort_key'])
+        
+        # Calculate total vehicles across all users
+        total_vehicles = sum(len(entry['vehicle_registrations']) for entry in result)
+        
+        return jsonify({
+            'success': True,
+            'data': result,
+            'count': len(result),
+            'total_vehicles': total_vehicles
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/gate-register/export', methods=['GET'])
+@jwt_required()
+def export_gate_register():
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Use the same logic as the gate register API but format for CSV export
+        active_users = User.query.filter_by(status='active').all()
+        gate_entries = []
+        
+        for user in active_users:
+            if user.role == 'admin':
+                continue
+            
+            resident_data = None
+            owner_data = None
+            status = 'Unknown'
+            
+            # Determine user status and get appropriate data
+            if user.resident and user.owner:
+                status = 'Owner-Resident'
+                resident_data = user.resident
+                owner_data = user.owner
+            elif user.resident:
+                status = 'Resident'
+                resident_data = user.resident
+            elif user.owner:
+                status = 'Non-Resident Owner'
+                owner_data = user.owner
+            
+            primary_data = resident_data if resident_data else owner_data
+            
+            if not primary_data:
+                continue
+            
+            # Get vehicle registrations for this user
+            vehicle_registrations = []
+            if resident_data:
+                vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            elif owner_data:
+                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            
+            # Handle multiple vehicles - create separate row for each vehicle
+            if vehicle_registrations:
+                for vehicle_reg in vehicle_registrations:
+                    entry = {
+                        'resident_status': status,
+                        'surname': primary_data.last_name or '',
+                        'street_number': str(primary_data.street_number or ''),
+                        'street_name': primary_data.street_name or '',
+                        'vehicle_registration': vehicle_reg,
+                        'erf_number': str(primary_data.erf_number or ''),
+                        'intercom_code': str(primary_data.intercom_code or ''),
+                        'sort_key': (primary_data.street_name or '').upper()
+                    }
+                    gate_entries.append(entry)
+            else:
+                # No vehicles - still include the resident/owner
+                entry = {
+                    'resident_status': status,
+                    'surname': primary_data.last_name or '',
+                    'street_number': str(primary_data.street_number or ''),
+                    'street_name': primary_data.street_name or '',
+                    'vehicle_registration': '',
+                    'erf_number': str(primary_data.erf_number or ''),
+                    'intercom_code': str(primary_data.intercom_code or ''),
+                    'sort_key': (primary_data.street_name or '').upper()
+                }
+                gate_entries.append(entry)
+        
+        # Sort by street name alphabetically
+        gate_entries.sort(key=lambda x: x['sort_key'])
+        
+        # Create CSV content
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'RESIDENT STATUS',
+            'SURNAME', 
+            'STREET NR',
+            'STREET NAME',
+            'VEHICLE REGISTRATION NR',
+            'ERF NR',
+            'INTERCOM NR'
+        ])
+        
+        # Write data rows
+        for entry in gate_entries:
+            writer.writerow([
+                entry['resident_status'],
+                entry['surname'],
+                entry['street_number'],
+                entry['street_name'],
+                entry['vehicle_registration'],
+                entry['erf_number'],
+                entry['intercom_code']
+            ])
+        
+        # Generate filename with timestamp
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        filename = f'gate_register_{timestamp}.csv'
+        
+        # Create response
+        output.seek(0)
+        csv_content = output.getvalue()
+        output.close()
+        
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'text/csv; charset=utf-8'
+            }
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to export gate register: {str(e)}'}), 500
 
 @admin_bp.route('/communication/emails', methods=['GET'])
 @jwt_required()
@@ -929,8 +1166,8 @@ def get_resident_vehicles(user_id):
             resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
             vehicles.extend([vehicle.to_dict() for vehicle in resident_vehicles])
         
-        # Get vehicles from owner data (for owner-only users)
-        if user.owner and not user.resident:
+        # Get vehicles from owner data (for all users who have owner records)
+        if user.owner:
             owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
             vehicles.extend([vehicle.to_dict() for vehicle in owner_vehicles])
         
