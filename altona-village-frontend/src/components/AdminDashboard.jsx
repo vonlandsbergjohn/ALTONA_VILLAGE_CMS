@@ -47,7 +47,7 @@ const AdminDashboard = () => {
       setStats({
         totalResidents: residents.data.length,
         totalProperties: properties.data.length,
-        totalVehicles: gateRegister.data.total_vehicles || 0,
+        totalVehicles: gateRegister.data.length,
         pendingRegistrations: pendingRegs.data.length,
         openComplaints: openComplaints.length,
         recentComplaints

@@ -5,7 +5,7 @@
             "args": [
                 "-NoExit",
                 "-Command",
-                "Set-Location 'C:\\Altona_Village_CMS'; & .venv\\Scripts\\Activate.ps1; python altona_village_cms\\src\\main.py"
+                "Set-Location 'c:\\Users\\WIEKUS\\OneDrive\\Altona Village Laptop\\CMS unzip1\\Altona_Village_CMS\\altona_village_cms\\src'; . .venv\\Scripts\\Activate.ps1; python main.py"
             ]
         },
         "Frontend (Altona CMS)": {
@@ -13,7 +13,7 @@
             "args": [
                 "-NoExit",
                 "-Command",
-                "Set-Location 'C:\\Altona_Village_CMS\\altona-village-frontend'; npm run dev"
+                "Set-Location 'c:\\Users\\WIEKUS\\OneDrive\\Altona Village Laptop\\CMS unzip1\\Altona_Village_CMS\\altona-village-frontend'; npm run dev"
             ]
         }
     }

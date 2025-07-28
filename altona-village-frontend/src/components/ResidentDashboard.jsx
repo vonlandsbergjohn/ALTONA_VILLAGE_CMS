@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { residentAPI } from '@/lib/api';
-import { useAuth, getUserResidencyType } from '@/lib/auth.jsx';
+import { useAuth } from '@/lib/auth.jsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -16,18 +16,16 @@ import {
 } from 'lucide-react';
 
 const ResidentDashboard = () => {
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const [data, setData] = useState({
     vehicles: [],
-    properties: [],
-    complaints: []
+    complaints: [],
+    properties: []
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDashboardData();
-    // Refresh user data to ensure we have the latest status information
-    refreshUser();
   }, []);
 
   const loadDashboardData = async () => {
@@ -93,7 +91,7 @@ const ResidentDashboard = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">
-          Welcome, {user?.resident?.first_name || user?.owner?.first_name || user?.full_name || 'Resident'}!
+          Welcome, {user?.resident?.first_name || 'Resident'}!
         </h1>
         <p className="text-gray-600">Manage your Altona Village account and services</p>
       </div>
@@ -111,12 +109,7 @@ const ResidentDashboard = () => {
             <div>
               <p className="text-sm text-gray-600">Name</p>
               <p className="font-medium">
-                {user?.resident?.first_name && user?.resident?.last_name 
-                  ? `${user.resident.first_name} ${user.resident.last_name}`
-                  : user?.owner?.first_name && user?.owner?.last_name
-                    ? `${user.owner.first_name} ${user.owner.last_name}`
-                    : user?.full_name || 'Not available'
-                }
+                {user?.resident?.first_name} {user?.resident?.last_name}
               </p>
             </div>
             <div>
@@ -132,7 +125,7 @@ const ResidentDashboard = () => {
             <div>
               <p className="text-sm text-gray-600">Status</p>
               <Badge className="bg-green-100 text-green-800">
-                {getUserResidencyType(user)}
+                {user?.resident?.is_owner ? 'Owner' : 'Tenant'}
               </Badge>
             </div>
           </div>

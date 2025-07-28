@@ -1,24 +1,11 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from src.models.user import User, Resident, Owner, Vehicle, Complaint, ComplaintUpdate, db
+from src.models.user import User, Resident, Vehicle, Complaint, ComplaintUpdate, db
 
 resident_bp = Blueprint('resident', __name__)
 
-def get_current_user_data():
-    """Get current user data (supports both residents and owners)"""
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return None, None, None
-    
-    # Return user and their resident/owner data
-    resident_data = user.resident if user.is_resident() else None
-    owner_data = user.owner if user.is_owner() else None
-    
-    return user, resident_data, owner_data
-
 def get_current_resident():
-    """Get current resident from JWT token (legacy function)"""
+    """Get current resident from JWT token"""
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user or user.role != 'resident':
@@ -29,22 +16,11 @@ def get_current_resident():
 @jwt_required()
 def get_my_vehicles():
     try:
-        user, resident_data, owner_data = get_current_user_data()
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
+        resident = get_current_resident()
+        if not resident:
+            return jsonify({'error': 'Resident not found'}), 404
         
-        vehicles = []
-        
-        # Get vehicles for residents
-        if resident_data:
-            resident_vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
-            vehicles.extend([vehicle.to_dict() for vehicle in resident_vehicles])
-        
-        # Get vehicles for owners (including owner-only users)
-        if owner_data:
-            owner_vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
-            vehicles.extend([vehicle.to_dict() for vehicle in owner_vehicles])
-        
+        vehicles = [vehicle.to_dict() for vehicle in resident.vehicles]
         return jsonify(vehicles), 200
         
     except Exception as e:
@@ -54,13 +30,9 @@ def get_my_vehicles():
 @jwt_required()
 def add_vehicle():
     try:
-        user, resident_data, owner_data = get_current_user_data()
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-        
-        # Both residents and owners can register vehicles
-        if not resident_data and not owner_data:
-            return jsonify({'error': 'Only residents and owners can register vehicles'}), 403
+        resident = get_current_resident()
+        if not resident:
+            return jsonify({'error': 'Resident not found'}), 404
         
         data = request.get_json()
         
@@ -68,10 +40,8 @@ def add_vehicle():
         if Vehicle.query.filter_by(registration_number=data['registration_number']).first():
             return jsonify({'error': 'Vehicle with this registration number already exists'}), 400
         
-        # Create vehicle - prefer resident_id if available, otherwise use owner_id
         vehicle = Vehicle(
-            resident_id=resident_data.id if resident_data else None,
-            owner_id=owner_data.id if (owner_data and not resident_data) else None,
+            resident_id=resident.id,
             registration_number=data['registration_number'],
             make=data.get('make'),
             model=data.get('model'),
@@ -91,17 +61,11 @@ def add_vehicle():
 @jwt_required()
 def update_vehicle(vehicle_id):
     try:
-        user, resident_data, owner_data = get_current_user_data()
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
+        resident = get_current_resident()
+        if not resident:
+            return jsonify({'error': 'Resident not found'}), 404
         
-        # Find vehicle belonging to this user (resident or owner)
-        vehicle = None
-        if resident_data:
-            vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=resident_data.id).first()
-        if not vehicle and owner_data:
-            vehicle = Vehicle.query.filter_by(id=vehicle_id, owner_id=owner_data.id).first()
-        
+        vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=resident.id).first()
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
         
@@ -130,17 +94,11 @@ def update_vehicle(vehicle_id):
 @jwt_required()
 def delete_vehicle(vehicle_id):
     try:
-        user, resident_data, owner_data = get_current_user_data()
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
+        resident = get_current_resident()
+        if not resident:
+            return jsonify({'error': 'Resident not found'}), 404
         
-        # Find vehicle belonging to this user (resident or owner)
-        vehicle = None
-        if resident_data:
-            vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=resident_data.id).first()
-        if not vehicle and owner_data:
-            vehicle = Vehicle.query.filter_by(id=vehicle_id, owner_id=owner_data.id).first()
-        
+        vehicle = Vehicle.query.filter_by(id=vehicle_id, resident_id=resident.id).first()
         if not vehicle:
             return jsonify({'error': 'Vehicle not found'}), 404
         
@@ -165,18 +123,9 @@ def get_my_complaints():
         for complaint in resident.complaints:
             complaint_data = complaint.to_dict()
             
-            # Add updates with user information
+            # Add updates
             if complaint.updates:
-                updates_with_user = []
-                for update in complaint.updates:
-                    update_data = update.to_dict()
-                    # Get the user who made the update (admin)
-                    update_user = User.query.get(update.user_id)
-                    if update_user:
-                        update_data['admin_name'] = update_user.get_full_name()
-                        update_data['admin_role'] = update_user.role
-                    updates_with_user.append(update_data)
-                complaint_data['updates'] = updates_with_user
+                complaint_data['updates'] = [update.to_dict() for update in complaint.updates]
             
             complaints.append(complaint_data)
         
@@ -225,18 +174,9 @@ def get_complaint(complaint_id):
         
         complaint_data = complaint.to_dict()
         
-        # Add updates with user information
+        # Add updates
         if complaint.updates:
-            updates_with_user = []
-            for update in complaint.updates:
-                update_data = update.to_dict()
-                # Get the user who made the update (admin)
-                update_user = User.query.get(update.user_id)
-                if update_user:
-                    update_data['admin_name'] = update_user.get_full_name()
-                    update_data['admin_role'] = update_user.role
-                updates_with_user.append(update_data)
-            complaint_data['updates'] = updates_with_user
+            complaint_data['updates'] = [update.to_dict() for update in complaint.updates]
         
         return jsonify(complaint_data), 200
         
