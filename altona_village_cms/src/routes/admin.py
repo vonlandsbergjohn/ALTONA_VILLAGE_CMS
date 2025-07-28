@@ -1,9 +1,11 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import text
 from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
 from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
+import csv
+import io
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -697,14 +699,143 @@ def get_gate_register():
         # Sort by street name alphabetically (same as export)
         result.sort(key=lambda x: x['sort_key'])
         
+        # Calculate total vehicles across all users
+        total_vehicles = sum(len(entry['vehicle_registrations']) for entry in result)
+        
         return jsonify({
             'success': True,
             'data': result,
-            'count': len(result)
+            'count': len(result),
+            'total_vehicles': total_vehicles
         }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/gate-register/export', methods=['GET'])
+@jwt_required()
+def export_gate_register():
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Use the same logic as the gate register API but format for CSV export
+        active_users = User.query.filter_by(status='active').all()
+        gate_entries = []
+        
+        for user in active_users:
+            if user.role == 'admin':
+                continue
+            
+            resident_data = None
+            owner_data = None
+            status = 'Unknown'
+            
+            # Determine user status and get appropriate data
+            if user.resident and user.owner:
+                status = 'Owner-Resident'
+                resident_data = user.resident
+                owner_data = user.owner
+            elif user.resident:
+                status = 'Resident'
+                resident_data = user.resident
+            elif user.owner:
+                status = 'Non-Resident Owner'
+                owner_data = user.owner
+            
+            primary_data = resident_data if resident_data else owner_data
+            
+            if not primary_data:
+                continue
+            
+            # Get vehicle registrations for this user
+            vehicle_registrations = []
+            if resident_data:
+                vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            elif owner_data:
+                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
+                vehicle_registrations = [v.registration_number for v in vehicles]
+            
+            # Handle multiple vehicles - create separate row for each vehicle
+            if vehicle_registrations:
+                for vehicle_reg in vehicle_registrations:
+                    entry = {
+                        'resident_status': status,
+                        'surname': primary_data.last_name or '',
+                        'street_number': str(primary_data.street_number or ''),
+                        'street_name': primary_data.street_name or '',
+                        'vehicle_registration': vehicle_reg,
+                        'erf_number': str(primary_data.erf_number or ''),
+                        'intercom_code': str(primary_data.intercom_code or ''),
+                        'sort_key': (primary_data.street_name or '').upper()
+                    }
+                    gate_entries.append(entry)
+            else:
+                # No vehicles - still include the resident/owner
+                entry = {
+                    'resident_status': status,
+                    'surname': primary_data.last_name or '',
+                    'street_number': str(primary_data.street_number or ''),
+                    'street_name': primary_data.street_name or '',
+                    'vehicle_registration': '',
+                    'erf_number': str(primary_data.erf_number or ''),
+                    'intercom_code': str(primary_data.intercom_code or ''),
+                    'sort_key': (primary_data.street_name or '').upper()
+                }
+                gate_entries.append(entry)
+        
+        # Sort by street name alphabetically
+        gate_entries.sort(key=lambda x: x['sort_key'])
+        
+        # Create CSV content
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'RESIDENT STATUS',
+            'SURNAME', 
+            'STREET NR',
+            'STREET NAME',
+            'VEHICLE REGISTRATION NR',
+            'ERF NR',
+            'INTERCOM NR'
+        ])
+        
+        # Write data rows
+        for entry in gate_entries:
+            writer.writerow([
+                entry['resident_status'],
+                entry['surname'],
+                entry['street_number'],
+                entry['street_name'],
+                entry['vehicle_registration'],
+                entry['erf_number'],
+                entry['intercom_code']
+            ])
+        
+        # Generate filename with timestamp
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        filename = f'gate_register_{timestamp}.csv'
+        
+        # Create response
+        output.seek(0)
+        csv_content = output.getvalue()
+        output.close()
+        
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'text/csv; charset=utf-8'
+            }
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to export gate register: {str(e)}'}), 500
 
 @admin_bp.route('/communication/emails', methods=['GET'])
 @jwt_required()

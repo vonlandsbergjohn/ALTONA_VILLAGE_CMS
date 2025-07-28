@@ -142,6 +142,11 @@ const AdminResidents = () => {
       setMessage({ type: 'success', text: 'Resident updated successfully' });
       setEditDialogOpen(false);
       loadResidents(); // Reload the data
+      
+      // Reload vehicles for the updated resident to reflect any changes due to status change
+      if (selectedResident?.user_id) {
+        await loadVehicles(selectedResident.user_id);
+      }
     } catch (error) {
       console.error('Failed to update resident:', error);
       setMessage({ 
@@ -635,8 +640,8 @@ const AdminResidents = () => {
             </form>
           )}
             
-          {/* Vehicle Management Section - Only show for residents */}
-          {selectedResident && selectedResident.is_resident && (
+          {/* Vehicle Management Section - Show for all users who can have vehicles */}
+          {selectedResident && (selectedResident.is_resident || selectedResident.is_owner) && (
               <div className="mt-6 pt-6 border-t space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold flex items-center gap-2">
