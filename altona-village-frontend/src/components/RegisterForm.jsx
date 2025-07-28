@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Home, CheckCircle } from 'lucide-react';
+import { Loader2, Home, CheckCircle, MapPin } from 'lucide-react';
+import EnhancedAltonaVillageMap from './EnhancedAltonaVillageMap';
 
 const RegisterForm = ({ onSwitchToLogin }) => {
   const [formData, setFormData] = useState({
@@ -28,6 +29,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [showMap, setShowMap] = useState(false);
 
   const { register } = useAuth();
 
@@ -37,6 +39,21 @@ const RegisterForm = ({ onSwitchToLogin }) => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  const handleMapErfSelect = (erfNumber, streetAddress) => {
+    // Parse street address to get street number and name
+    const addressParts = streetAddress.trim().split(' ');
+    const streetNumber = addressParts[0];
+    const streetName = addressParts.slice(1).join(' ');
+    
+    setFormData(prev => ({
+      ...prev,
+      erf_number: erfNumber,
+      street_number: streetNumber,
+      street_name: streetName
+    }));
+    setShowMap(false);
   };
 
   const handleSubmit = async (e) => {
@@ -169,14 +186,29 @@ const RegisterForm = ({ onSwitchToLogin }) => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="erf_number">Erf Number</Label>
-              <Input
-                id="erf_number"
-                name="erf_number"
-                value={formData.erf_number}
-                onChange={handleChange}
-                placeholder="e.g. 123"
-                required
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="erf_number"
+                  name="erf_number"
+                  value={formData.erf_number}
+                  onChange={handleChange}
+                  placeholder="e.g. 123"
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowMap(true)}
+                  className="flex items-center gap-1 px-3 whitespace-nowrap"
+                >
+                  <MapPin className="w-4 h-4" />
+                  Find on Map
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                Click "Find on Map" to locate your property on the Altona Village map
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -320,6 +352,15 @@ const RegisterForm = ({ onSwitchToLogin }) => {
           </div>
         </CardContent>
       </Card>
+      
+      {/* Enhanced Altona Village Map Modal with PDF Support */}
+      {showMap && (
+        <EnhancedAltonaVillageMap
+          onErfSelect={handleMapErfSelect}
+          selectedErf={formData.erf_number}
+          onClose={() => setShowMap(false)}
+        />
+      )}
     </div>
   );
 };
