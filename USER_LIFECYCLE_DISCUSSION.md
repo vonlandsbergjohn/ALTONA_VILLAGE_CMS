@@ -36,6 +36,7 @@ Instead of deleting users, use status-based approach:
 - Do these status categories cover all scenarios?
 - Should we add additional status types?
 - How long should users remain in each status? (See detailed breakdown below for each user group)
+- What should trigger each status change? (See Status Triggers section below)
 
 ### 2. Property-User Relationship Tracking
 - **Current User** (active relationship)
@@ -78,6 +79,82 @@ Admin Dashboard Features:
 - Is this workflow realistic for your office procedures?
 - What steps are missing or unnecessary?
 - How much automation vs manual control do you prefer?
+
+---
+
+## 🔄 STATUS TRIGGERS - WHAT CAUSES EACH STATUS CHANGE
+
+### **`active` Status - When Users Become Active**
+
+**Triggers:**
+- **New user approved:** Admin approves registration after review
+- **User reactivated:** Previously inactive user returns to property
+- **Transfer completed:** New user successfully takes over property
+- **Owner moves back in:** Owner-only becomes owner-resident again
+
+**YOUR INPUT:**
+- Are there other scenarios that should trigger `active` status?
+- Should there be automatic reactivation triggers?
+
+---
+
+### **`inactive` Status - When Users Become Inactive**
+
+**Triggers:**
+- **Tenant moves out:** Leaves property permanently
+- **Owner sells and leaves estate:** No longer owns property in estate
+- **Manual admin action:** Admin marks user as inactive for various reasons
+- **Extended non-use:** User hasn't accessed app for extended period (optional)
+
+**Sub-categories to track:**
+- Moved out vs Sold property vs Deceased vs Banned vs Other
+
+**YOUR INPUT:**
+- Should we track the specific reason for becoming inactive?
+- Should there be automatic inactivity after a period of non-use?
+- How do you want to handle deceased users or banned users?
+
+---
+
+### **`transferred` Status - When Users Move/Change Roles**
+
+**Triggers:**
+- **Property-to-property move:** User moves from ERF 123 to ERF 456 within estate
+- **Role change same property:** Tenant buys their rental property (becomes owner)
+- **Owner changes properties:** Sells ERF 100, buys ERF 200 within estate
+- **Status change with move:** Owner-resident sells but buys different property as owner-only
+
+**Important Distinction:**
+- **Profile updates on same property = Stay `active`** (phone, intercom code, emergency contacts)
+- **Actual property/role change = `transferred`** (different ERF, different legal relationship)
+
+**YOUR INPUT:**
+- How do we distinguish between "data correction" vs "actual transfer"?
+- Should ERF number changes always trigger transfer status?
+- What about street address changes within same ERF?
+
+---
+
+### **`pending_transfer` Status - Notice Period Management**
+
+**Triggers:**
+- **Tenant gives notice:** "I'm moving out in 30 days"
+- **Owner lists property:** "I've put my house on the market"
+- **Owner-resident moving out:** "I'm moving out but keeping the property"
+- **Sale under contract:** Property sale agreed but not yet completed
+- **Admin receives notice:** Office gets advance notice of upcoming move
+
+**During Pending Transfer:**
+- **Access level:** Should they keep full access or limited access?
+- **New registrations:** Can they still add vehicles/update details?
+- **Duration:** How long before auto-reverting to `active` if no action?
+- **Admin tools:** Should admin be able to extend/cancel pending status?
+
+**YOUR INPUT:**
+- What's the typical notice period for tenants? For owners?
+- Should access change during the pending period?
+- What if users change their mind during pending status?
+- Should there be automatic transitions after notice period expires?
 
 ---
 
@@ -173,7 +250,38 @@ Admin Dashboard Features:
 
 ## ❓ KEY DISCUSSION QUESTIONS
 
-### 1. Data Retention Policy by User Group
+### 1. Status Trigger Management
+**Question:** How should the system handle status transitions?
+
+**Considerations:**
+- **User-initiated:** Users can request status changes (give notice, request transfer)
+- **Admin-controlled:** Only admin can change user status
+- **Automatic triggers:** System automatically changes status based on conditions
+- **Hybrid approach:** Combination of user requests and admin approval
+
+**Specific Scenarios:**
+- Should users be able to self-report that they're moving out?
+- Should ERF number changes automatically trigger transfer status?
+- Should extended non-use automatically trigger inactive status?
+- Should there be approval workflows for status changes?
+
+**YOUR ANSWER:**
+[Please describe how you want status transitions to be controlled and triggered]
+
+### 2. Pending Transfer Duration and Management
+**Question:** How should the pending_transfer status be managed?
+
+**Key Points:**
+- **Notice periods:** Typical timeframes for your estate
+- **Access during pending:** Full access vs limited access vs read-only
+- **Automatic transitions:** Should system auto-complete transfers after notice period?
+- **Change of mind:** How to handle users who cancel their move plans
+- **Multiple properties:** How to handle users with multiple properties giving notice
+
+**YOUR ANSWER:**
+[Please specify notice periods, access levels, and management preferences for pending transfers]
+
+### 3. Data Retention Policy by User Group
 **Question:** How long should we keep user data for each group after they become inactive?
 
 **User Group Specific Considerations:**
@@ -196,7 +304,30 @@ Admin Dashboard Features:
 **YOUR ANSWER:**
 [Please specify retention periods for each user group and explain your reasoning]
 
-### 2. Vehicle Transfer Management
+### 4. Transfer vs Profile Update Distinction
+**Question:** How do we distinguish between profile updates (stay active) vs actual transfers (change status)?
+
+**Profile Updates (Stay Active):**
+- Phone number changes
+- Intercom code updates
+- Emergency contact changes
+- Correcting spelling in addresses
+- Adding/removing vehicles
+
+**Actual Transfers (Change Status):**
+- Moving to different ERF number
+- Changing from tenant to owner of same property
+- Moving from one role to another (owner-resident to owner-only)
+
+**Gray Areas:**
+- User updates ERF from 123 to 456 - is this a move or correction?
+- Street address changes - when is it a move vs address correction?
+- Adding family members - when does this become a new user vs profile update?
+
+**YOUR ANSWER:**
+[Please clarify how to distinguish between profile updates and transfers, especially for gray area scenarios]
+
+### 5. Vehicle Transfer Management
 **Question:** Should vehicles automatically transfer to new users?
 
 **Considerations:**
@@ -207,7 +338,7 @@ Admin Dashboard Features:
 **YOUR ANSWER:**
 [Please provide your approach to vehicle transitions]
 
-### 3. Access Control Timing
+### 6. Access Control Timing
 **Question:** Should old users immediately lose access or have a grace period?
 
 **Options:**
@@ -219,7 +350,7 @@ Admin Dashboard Features:
 **YOUR ANSWER:**
 [Please specify your preferred access control approach]
 
-### 4. Communication and Notifications
+### 7. Communication and Notifications
 **Question:** Should both old and new users be notified of transfers?
 
 **Considerations:**
@@ -231,7 +362,7 @@ Admin Dashboard Features:
 **YOUR ANSWER:**
 [Please outline your communication preferences]
 
-### 5. Emergency Contact Transitions
+### 8. Emergency Contact Transitions
 **Question:** How do we handle emergency contact transitions?
 
 **Scenarios:**
@@ -242,7 +373,7 @@ Admin Dashboard Features:
 **YOUR ANSWER:**
 [Please describe how emergency contacts should be handled]
 
-### 6. Current Manual Process
+### 9. Current Manual Process
 **Question:** How do you currently handle these transitions manually?
 
 **Please describe:**
@@ -254,7 +385,7 @@ Admin Dashboard Features:
 **YOUR ANSWER:**
 [Please provide detailed description of current process]
 
-### 7. Legal and Compliance Requirements
+### 10. Legal and Compliance Requirements
 **Question:** Are there any legal/compliance requirements for data retention in your jurisdiction?
 
 **Considerations:**
@@ -266,7 +397,7 @@ Admin Dashboard Features:
 **YOUR ANSWER:**
 [Please outline any legal requirements we must consider]
 
-### 8. User-Initiated Processes
+### 11. User-Initiated Processes
 **Question:** Should users be able to initiate their own "moving out" process?
 
 **Considerations:**
