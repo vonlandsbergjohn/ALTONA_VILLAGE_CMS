@@ -77,6 +77,27 @@
 				"showReuseMessage": true,
 				"clear": false
 			}
+		},
+		{
+			"label": "Save & Close All Files",
+			"type": "shell",
+			"command": "powershell.exe",
+			"args": [
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				"${workspaceFolder}/close_all_files.ps1"
+			],
+			"group": "build",
+			"isBackground": false,
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new",
+				"showReuseMessage": false,
+				"clear": true
+			}
 		}
 	]
 }
