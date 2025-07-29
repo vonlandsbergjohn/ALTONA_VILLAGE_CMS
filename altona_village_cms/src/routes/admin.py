@@ -437,6 +437,49 @@ def update_resident(user_id):
                 # For owner-resident status, vehicles can be associated with either record
                 # We'll keep them as they are but ensure they show up in queries
         
+        # Log changes for admin change tracking
+        try:
+            # Get user display name and ERF number for logging
+            if user.resident:
+                user_name = f"{user.resident.first_name} {user.resident.last_name}".strip()
+                erf_number = user.resident.erf_number or 'Unknown'
+            elif user.owner:
+                user_name = f"{user.owner.first_name} {user.owner.last_name}".strip()
+                erf_number = user.owner.erf_number or 'Unknown'
+            else:
+                user_name = user.email
+                erf_number = 'Unknown'
+            
+            # Log changes made by admin
+            admin_user_id = get_jwt_identity()
+            
+            # Log specific field changes
+            if 'full_name' in data:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'full_name', 'Previous Name', data['full_name'])
+            
+            if 'phone' in data:
+                old_phone = user.resident.phone_number if user.resident else (user.owner.phone_number if user.owner else 'None')
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'cellphone_number', old_phone, data['phone'])
+            
+            if 'email' in data:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'email', user.email, data['email'])
+            
+            if 'intercom_code' in data:
+                old_intercom = user.resident.intercom_code if user.resident else (user.owner.intercom_code if user.owner else 'None')
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'intercom_code', old_intercom, data['intercom_code'])
+            
+            if 'property_address' in data:
+                old_address = user.resident.full_address if user.resident else (user.owner.full_address if user.owner else 'None')
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'property_address', old_address, data['property_address'])
+            
+            if 'resident_status_change' in data or 'tenant_or_owner' in data:
+                new_status = data.get('resident_status_change') or data.get('tenant_or_owner')
+                old_status = 'Owner-Resident' if (user.resident and user.owner) else ('Resident' if user.resident else 'Non-Resident Owner')
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'resident_status', old_status, new_status)
+                
+        except Exception as log_error:
+            print(f"Error logging admin change: {log_error}")
+        
         user.updated_at = datetime.utcnow()
         db.session.commit()
         
@@ -1242,7 +1285,15 @@ def mark_change_processed(change_id):
         if '-' not in change_id:
             return jsonify({'error': 'Invalid change ID format'}), 400
             
-        user_id, field_name = change_id.split('-', 1)
+        # Split the change_id - UUID has 4 dashes, so we need to find the 5th dash
+        parts = change_id.split('-')
+        
+        if len(parts) < 6:  # UUID (5 parts) + field_name (at least 1 part)
+            return jsonify({'error': 'Invalid change ID format'}), 400
+            
+        # First 5 parts are the UUID, rest is field_name
+        user_id = '-'.join(parts[:5])  # UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        field_name = '-'.join(parts[5:])  # Everything after UUID
         
         # Update the change record in database
         import sqlite3
@@ -1251,11 +1302,29 @@ def mark_change_processed(change_id):
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
             
-            # Mark the specific change as reviewed
+            # First check if the change exists
+            cursor.execute("""
+                SELECT id FROM user_changes 
+                WHERE user_id = ? AND field_name = ? AND admin_reviewed = 0
+                ORDER BY change_timestamp DESC
+                LIMIT 1
+            """, (user_id, field_name))
+            
+            result = cursor.fetchone()
+            
+            if not result:
+                return jsonify({'error': 'Change not found or already processed'}), 404
+            
+            # Mark the most recent unreviewed change for this user and field as reviewed
             cursor.execute("""
                 UPDATE user_changes 
                 SET admin_reviewed = 1 
-                WHERE user_id = ? AND field_name = ? AND admin_reviewed = 0
+                WHERE id = (
+                    SELECT id FROM user_changes 
+                    WHERE user_id = ? AND field_name = ? AND admin_reviewed = 0
+                    ORDER BY change_timestamp DESC
+                    LIMIT 1
+                )
             """, (user_id, field_name))
             
             if cursor.rowcount == 0:
@@ -1267,6 +1336,9 @@ def mark_change_processed(change_id):
             'success': True,
             'message': 'Change marked as processed'
         }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
         
     except Exception as e:
         return jsonify({'error': f'Failed to mark change as processed: {str(e)}'}), 500
@@ -1671,6 +1743,12 @@ def update_resident_vehicle(user_id, vehicle_id):
             if existing_vehicle:
                 return jsonify({'error': 'Vehicle with this registration number already exists'}), 400
         
+        # Store old values for logging before updating
+        old_registration = vehicle.registration_number
+        old_make = vehicle.make
+        old_model = vehicle.model
+        old_color = vehicle.color
+        
         # Update vehicle fields
         if 'registration_number' in data:
             vehicle.registration_number = data['registration_number']
@@ -1680,6 +1758,36 @@ def update_resident_vehicle(user_id, vehicle_id):
             vehicle.model = data['model']
         if 'color' in data:
             vehicle.color = data['color']
+
+        # Log changes for admin change tracking
+        try:
+            # Get user display name and ERF number for logging
+            if user.resident:
+                user_name = f"{user.resident.first_name} {user.resident.last_name}".strip()
+                erf_number = user.resident.erf_number or 'Unknown'
+            elif user.owner:
+                user_name = f"{user.owner.first_name} {user.owner.last_name}".strip()
+                erf_number = user.owner.erf_number or 'Unknown'
+            else:
+                user_name = user.email
+                erf_number = 'Unknown'
+            
+            # Log vehicle registration changes (critical field)
+            if 'registration_number' in data and data['registration_number'] != old_registration:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'vehicle_registration', old_registration, data['registration_number'])
+            
+            # Log other vehicle changes
+            if 'make' in data and data['make'] != old_make:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'vehicle_make', old_make, data['make'])
+            
+            if 'model' in data and data['model'] != old_model:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'vehicle_model', old_model, data['model'])
+            
+            if 'color' in data and data['color'] != old_color:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'vehicle_color', old_color, data['color'])
+                
+        except Exception as log_error:
+            print(f"Error logging admin vehicle change: {log_error}")
         
         db.session.commit()
         
