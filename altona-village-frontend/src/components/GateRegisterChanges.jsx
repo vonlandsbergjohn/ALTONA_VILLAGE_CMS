@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, AlertCircle, Clock, User, Phone, Car } from 'lucide-react';
+import { Download, AlertCircle, Clock, User, Phone, Car, Settings } from 'lucide-react';
 import { adminAPI } from '@/lib/api';
 
 const GateRegisterChanges = () => {
@@ -131,6 +131,8 @@ const GateRegisterChanges = () => {
           intercom_code: entry.intercom_code,
           phone_number: entry.phone_number,
           phone_changed: entry.phone_changed,
+          phone_is_critical: entry.phone_is_critical,
+          intercom_changed: entry.intercom_changed,
           email: entry.email
         },
         vehicles: []
@@ -226,12 +228,16 @@ const GateRegisterChanges = () => {
                       </td>
                       <td className={`px-4 py-3 whitespace-nowrap text-sm font-medium ${
                         userInfo.phone_changed && vehicleIndex === 0
-                          ? 'bg-red-100 text-red-900 border-2 border-red-300 rounded'
+                          ? userInfo.phone_is_critical !== false
+                            ? 'bg-red-100 text-red-900 border-2 border-red-300 rounded'
+                            : 'bg-green-100 text-green-900 border-2 border-green-300 rounded'
                           : 'text-gray-900'
                       }`}>
                         <div className="flex items-center">
                           {userInfo.phone_changed && vehicleIndex === 0 && (
-                            <Phone className="h-4 w-4 mr-1 text-red-600" />
+                            <Phone className={`h-4 w-4 mr-1 ${
+                              userInfo.phone_is_critical !== false ? 'text-red-600' : 'text-green-600'
+                            }`} />
                           )}
                           {userInfo.phone_number}
                         </div>
@@ -257,8 +263,17 @@ const GateRegisterChanges = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                         {userInfo.erf_number}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {userInfo.intercom_code}
+                      <td className={`px-4 py-3 whitespace-nowrap text-sm font-medium ${
+                        userInfo.intercom_changed && vehicleIndex === 0
+                          ? 'bg-green-100 text-green-900 border-2 border-green-300 rounded'
+                          : 'text-gray-900'
+                      }`}>
+                        <div className="flex items-center">
+                          {userInfo.intercom_changed && vehicleIndex === 0 && (
+                            <Settings className="h-4 w-4 mr-1 text-green-600" />
+                          )}
+                          {userInfo.intercom_code}
+                        </div>
                       </td>
                     </tr>
                   ));
@@ -299,8 +314,17 @@ const GateRegisterChanges = () => {
                       <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
                         {userInfo.erf_number}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {userInfo.intercom_code}
+                      <td className={`px-4 py-3 whitespace-nowrap text-sm font-medium ${
+                        userInfo.intercom_changed
+                          ? 'bg-green-100 text-green-900 border-2 border-green-300 rounded'
+                          : 'text-gray-900'
+                      }`}>
+                        <div className="flex items-center">
+                          {userInfo.intercom_changed && (
+                            <Settings className="h-4 w-4 mr-1 text-green-600" />
+                          )}
+                          {userInfo.intercom_code}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -317,15 +341,23 @@ const GateRegisterChanges = () => {
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center">
             <div className="w-4 h-4 bg-red-100 border-2 border-red-300 rounded mr-2"></div>
-            <span className="text-yellow-700">Changed Information (red background)</span>
+            <span className="text-yellow-700">Critical Changes (red background)</span>
+          </div>
+          <div className="flex items-center">
+            <div className="w-4 h-4 bg-green-100 border-2 border-green-300 rounded mr-2"></div>
+            <span className="text-yellow-700">Non-Critical Changes (green background)</span>
           </div>
           <div className="flex items-center">
             <Phone className="h-4 w-4 text-red-600 mr-1" />
-            <span className="text-yellow-700">Phone number changed</span>
+            <span className="text-yellow-700">Phone number changed (critical)</span>
           </div>
           <div className="flex items-center">
             <Car className="h-4 w-4 text-red-600 mr-1" />
-            <span className="text-yellow-700">Vehicle registration changed</span>
+            <span className="text-yellow-700">Vehicle registration changed (critical)</span>
+          </div>
+          <div className="flex items-center">
+            <Settings className="h-4 w-4 text-green-600 mr-1" />
+            <span className="text-yellow-700">Intercom code changed (non-critical)</span>
           </div>
         </div>
       </div>

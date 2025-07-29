@@ -73,6 +73,11 @@ export const adminAPI = {
       throw error;
     }
   },
+  // Change tracking API methods
+  getCriticalChanges: () => api.get('/admin/changes/critical'),
+  getNonCriticalChanges: (params = {}) => api.get('/admin/changes/non-critical', { params }),
+  getChangeStats: () => api.get('/admin/changes/stats'),
+  reviewChanges: (changeIds, notes = '') => api.post('/admin/changes/review', { change_ids: changeIds, notes }),
   markChangeProcessed: (changeId) => api.post(`/admin/changes/${changeId}/mark-processed`),
   // Admin Vehicle Management
   getResidentVehicles: (userId) => api.get(`/admin/residents/${userId}/vehicles`),

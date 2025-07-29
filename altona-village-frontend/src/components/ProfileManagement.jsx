@@ -21,7 +21,8 @@ const ProfileManagement = () => {
     emergency_contact_phone: '',
     property_address: '',
     tenant_or_owner: '',
-    intercom_code: ''
+    intercom_code: '',
+    erf_number: ''
   });
   const [passwords, setPasswords] = useState({
     current_password: '',
@@ -264,17 +265,32 @@ const ProfileManagement = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="intercom_code">Intercom Code</Label>
-                  <div className="relative">
-                    <KeyRound className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input
-                      id="intercom_code"
-                      value={profile.intercom_code}
-                      onChange={(e) => setProfile({...profile, intercom_code: e.target.value})}
-                      placeholder="Enter your intercom access code"
-                      className="pl-10"
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="erf_number">ERF Number</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="erf_number"
+                        value={profile.erf_number}
+                        onChange={(e) => setProfile({...profile, erf_number: e.target.value})}
+                        placeholder="Your ERF number"
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="intercom_code">Intercom Code</Label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="intercom_code"
+                        value={profile.intercom_code}
+                        onChange={(e) => setProfile({...profile, intercom_code: e.target.value})}
+                        placeholder="Enter your intercom access code"
+                        className="pl-10"
+                      />
+                    </div>
                   </div>
                 </div>
 

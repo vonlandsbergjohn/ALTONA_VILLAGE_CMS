@@ -221,6 +221,7 @@ def profile():
         'emergency_contact_name': '',
         'emergency_contact_phone': '',
         'intercom_code': '',
+        'erf_number': '',
         'resident': user.resident.to_dict() if user.resident else None,  # Include resident data
         'owner': user.owner.to_dict() if user.owner else None  # Include owner data
     }
@@ -233,7 +234,8 @@ def profile():
             'property_address': resident.full_address or '',
             'emergency_contact_name': resident.emergency_contact_name or '',
             'emergency_contact_phone': resident.emergency_contact_number or '',
-            'intercom_code': resident.intercom_code or ''
+            'intercom_code': resident.intercom_code or '',
+            'erf_number': resident.erf_number or ''
         })
     
     # Add owner data if available (overrides resident data for shared fields)
@@ -244,7 +246,8 @@ def profile():
             'property_address': owner.full_address or profile_data['property_address'],
             'emergency_contact_name': owner.emergency_contact_name or profile_data['emergency_contact_name'],
             'emergency_contact_phone': owner.emergency_contact_number or profile_data['emergency_contact_phone'],
-            'intercom_code': owner.intercom_code or profile_data['intercom_code']
+            'intercom_code': owner.intercom_code or profile_data['intercom_code'],
+            'erf_number': owner.erf_number or profile_data['erf_number']
         })
     
     # Determine tenant_or_owner status

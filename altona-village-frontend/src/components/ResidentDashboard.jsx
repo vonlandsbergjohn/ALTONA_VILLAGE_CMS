@@ -12,7 +12,9 @@ import {
   Plus,
   Building,
   Phone,
-  Mail
+  Mail,
+  MapPin,
+  KeyRound
 } from 'lucide-react';
 
 const ResidentDashboard = () => {
@@ -107,7 +109,7 @@ const ResidentDashboard = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-gray-600">Name</p>
               <p className="font-medium">
@@ -123,6 +125,12 @@ const ResidentDashboard = () => {
               <p className="text-sm text-gray-600">Email</p>
               <p className="font-medium">{user?.email}</p>
             </div>
+            <div>
+              <p className="text-sm text-gray-600">Status</p>
+              <Badge className="bg-green-100 text-green-800">
+                {getUserResidencyType(user)}
+              </Badge>
+            </div>
             {user?.resident?.phone_number && (
               <div>
                 <p className="text-sm text-gray-600">Phone</p>
@@ -130,10 +138,22 @@ const ResidentDashboard = () => {
               </div>
             )}
             <div>
-              <p className="text-sm text-gray-600">Status</p>
-              <Badge className="bg-green-100 text-green-800">
-                {getUserResidencyType(user)}
-              </Badge>
+              <p className="text-sm text-gray-600 flex items-center">
+                <MapPin className="h-4 w-4 mr-1" />
+                ERF Number
+              </p>
+              <p className="font-medium">
+                {user?.resident?.erf_number || user?.owner?.erf_number || 'Not available'}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600 flex items-center">
+                <KeyRound className="h-4 w-4 mr-1" />
+                Intercom Code
+              </p>
+              <p className="font-medium">
+                {user?.resident?.intercom_code || user?.owner?.intercom_code || 'Not available'}
+              </p>
             </div>
           </div>
           <Button 

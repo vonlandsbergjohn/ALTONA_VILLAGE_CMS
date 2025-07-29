@@ -223,6 +223,33 @@ def update_resident(user_id):
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
+        # Capture old values BEFORE making changes for change tracking
+        old_values = {}
+        
+        # Capture old values for comparison
+        if 'full_name' in data:
+            if user.resident:
+                old_values['full_name'] = f"{user.resident.first_name} {user.resident.last_name}".strip()
+            elif user.owner:
+                old_values['full_name'] = f"{user.owner.first_name} {user.owner.last_name}".strip()
+            else:
+                old_values['full_name'] = ""
+        
+        if 'phone' in data:
+            old_values['phone'] = user.resident.phone_number if user.resident else (user.owner.phone_number if user.owner else '')
+        
+        if 'email' in data:
+            old_values['email'] = user.email
+            
+        if 'intercom_code' in data:
+            old_values['intercom_code'] = user.resident.intercom_code if user.resident else (user.owner.intercom_code if user.owner else '')
+            
+        if 'property_address' in data:
+            old_values['property_address'] = user.resident.full_address if user.resident else (user.owner.full_address if user.owner else '')
+        
+        if 'resident_status_change' in data or 'tenant_or_owner' in data:
+            old_values['resident_status'] = 'Owner-Resident' if (user.resident and user.owner) else ('Resident' if user.resident else 'Non-Resident Owner')
+        
         # Update user basic info
         if 'email' in data:
             # Check if email is already in use by another user
@@ -450,32 +477,26 @@ def update_resident(user_id):
                 user_name = user.email
                 erf_number = 'Unknown'
             
-            # Log changes made by admin
-            admin_user_id = get_jwt_identity()
+            # Log changes made by admin - only if values actually changed
+            if 'full_name' in data and old_values.get('full_name') != data['full_name']:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'full_name', old_values['full_name'], data['full_name'])
             
-            # Log specific field changes
-            if 'full_name' in data:
-                log_user_change(user.id, user_name, erf_number, 'admin_update', 'full_name', 'Previous Name', data['full_name'])
+            if 'phone' in data and old_values.get('phone') != data['phone']:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'cellphone_number', old_values['phone'], data['phone'])
             
-            if 'phone' in data:
-                old_phone = user.resident.phone_number if user.resident else (user.owner.phone_number if user.owner else 'None')
-                log_user_change(user.id, user_name, erf_number, 'admin_update', 'cellphone_number', old_phone, data['phone'])
+            if 'email' in data and old_values.get('email') != data['email']:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'email', old_values['email'], data['email'])
             
-            if 'email' in data:
-                log_user_change(user.id, user_name, erf_number, 'admin_update', 'email', user.email, data['email'])
+            if 'intercom_code' in data and old_values.get('intercom_code') != data['intercom_code']:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'intercom_code', old_values['intercom_code'], data['intercom_code'])
             
-            if 'intercom_code' in data:
-                old_intercom = user.resident.intercom_code if user.resident else (user.owner.intercom_code if user.owner else 'None')
-                log_user_change(user.id, user_name, erf_number, 'admin_update', 'intercom_code', old_intercom, data['intercom_code'])
+            if 'property_address' in data and old_values.get('property_address') != data['property_address']:
+                log_user_change(user.id, user_name, erf_number, 'admin_update', 'property_address', old_values['property_address'], data['property_address'])
             
-            if 'property_address' in data:
-                old_address = user.resident.full_address if user.resident else (user.owner.full_address if user.owner else 'None')
-                log_user_change(user.id, user_name, erf_number, 'admin_update', 'property_address', old_address, data['property_address'])
-            
-            if 'resident_status_change' in data or 'tenant_or_owner' in data:
+            if ('resident_status_change' in data or 'tenant_or_owner' in data):
                 new_status = data.get('resident_status_change') or data.get('tenant_or_owner')
-                old_status = 'Owner-Resident' if (user.resident and user.owner) else ('Resident' if user.resident else 'Non-Resident Owner')
-                log_user_change(user.id, user_name, erf_number, 'admin_update', 'resident_status', old_status, new_status)
+                if old_values.get('resident_status') != new_status:
+                    log_user_change(user.id, user_name, erf_number, 'admin_update', 'resident_status', old_values['resident_status'], new_status)
                 
         except Exception as log_error:
             print(f"Error logging admin change: {log_error}")
@@ -923,17 +944,22 @@ def get_gate_register_changes():
                 'message': 'No pending changes found'
             }), 200
         
-        # Group changes by user_id
+        # Group changes by user_id and classify them
         changes_by_user = {}
+        critical_fields = ['cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
+        
         for change in user_changes:
             user_id, field_name, new_value, old_value, timestamp = change
             if user_id not in changes_by_user:
                 changes_by_user[user_id] = {}
+            
+            is_critical = field_name in critical_fields
             changes_by_user[user_id][field_name] = {
                 'new_value': new_value,
                 'old_value': old_value,
                 'timestamp': timestamp,
-                'changed': True
+                'changed': True,
+                'is_critical': is_critical
             }
         
         # Get gate register data for users with changes
@@ -1081,17 +1107,22 @@ def export_gate_register_changes():
         if not user_changes:
             return jsonify({'error': 'No pending changes found to export'}), 404
         
-        # Group changes by user_id
+        # Group changes by user_id and classify them
         changes_by_user = {}
+        critical_fields = ['cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
+        
         for change in user_changes:
             user_id, field_name, new_value, old_value, timestamp = change
             if user_id not in changes_by_user:
                 changes_by_user[user_id] = {}
+            
+            is_critical = field_name in critical_fields
             changes_by_user[user_id][field_name] = {
                 'new_value': new_value,
                 'old_value': old_value,
                 'timestamp': timestamp,
-                'changed': True
+                'changed': True,
+                'is_critical': is_critical
             }
         
         # Create CSV with change highlighting (HTML format for red backgrounds)
@@ -1107,8 +1138,9 @@ def export_gate_register_changes():
         table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
         th { background-color: #f2f2f2; font-weight: bold; }
-        .changed { background-color: #ff6b6b !important; color: white; font-weight: bold; }
-        .header { background-color: #4CAF50; color: white; }
+        .critical-changed { background-color: #ff6b6b !important; color: white; font-weight: bold; }
+        .non-critical-changed { background-color: #4CAF50 !important; color: white; font-weight: bold; }
+        .header { background-color: #2196F3; color: white; }
     </style>
 </head>
 <body>
@@ -1174,11 +1206,19 @@ def export_gate_register_changes():
             # Get changes for this user
             user_change_info = changes_by_user.get(user_uuid, {})
             
-            # Check if phone number was changed
+            # Check if phone number was changed (critical)
+            phone_change_info = user_change_info.get('cellphone_number', {})
             phone_changed = 'cellphone_number' in user_change_info
-            current_phone = user_change_info.get('cellphone_number', {}).get('new_value', primary_data.phone_number or '')
+            current_phone = phone_change_info.get('new_value', primary_data.phone_number or '')
+            phone_is_critical = phone_change_info.get('is_critical', True)
             
-            # Check if any vehicle registrations were changed
+            # Check if intercom code was changed (non-critical)
+            intercom_change_info = user_change_info.get('intercom_code', {})
+            intercom_changed = 'intercom_code' in user_change_info
+            current_intercom = intercom_change_info.get('new_value', primary_data.intercom_code or '')
+            intercom_is_critical = intercom_change_info.get('is_critical', False)
+            
+            # Check if any vehicle registrations were changed (critical)
             vehicle_changes = [change for field, change in user_change_info.items() if 'vehicle_registration' in field]
             
             if vehicle_registrations:
@@ -1187,9 +1227,16 @@ def export_gate_register_changes():
                     # Check if this specific vehicle was changed
                     vehicle_changed = any(change['new_value'] == vehicle_reg for change in vehicle_changes)
                     
-                    # Create table row with conditional red background
-                    phone_class = 'changed' if (phone_changed and i == 0) else ''
-                    vehicle_class = 'changed' if vehicle_changed else ''
+                    # Determine CSS classes based on change type
+                    phone_class = ''
+                    if phone_changed and i == 0:
+                        phone_class = 'critical-changed' if phone_is_critical else 'non-critical-changed'
+                    
+                    vehicle_class = 'critical-changed' if vehicle_changed else ''
+                    
+                    intercom_class = ''
+                    if intercom_changed and i == 0:
+                        intercom_class = 'non-critical-changed' if not intercom_is_critical else 'critical-changed'
                     
                     html_content += f"""
         <tr>
@@ -1201,11 +1248,17 @@ def export_gate_register_changes():
             <td>{primary_data.street_name or ''}</td>
             <td class="{vehicle_class}">{vehicle_reg}</td>
             <td>{primary_data.erf_number or ''}</td>
-            <td>{primary_data.intercom_code or ''}</td>
+            <td class="{intercom_class}">{current_intercom}</td>
         </tr>"""
             else:
                 # No vehicles - still include the resident/owner
-                phone_class = 'changed' if phone_changed else ''
+                phone_class = ''
+                if phone_changed:
+                    phone_class = 'critical-changed' if phone_is_critical else 'non-critical-changed'
+                
+                intercom_class = ''
+                if intercom_changed:
+                    intercom_class = 'non-critical-changed' if not intercom_is_critical else 'critical-changed'
                 
                 html_content += f"""
         <tr>
@@ -1217,7 +1270,7 @@ def export_gate_register_changes():
             <td>{primary_data.street_name or ''}</td>
             <td></td>
             <td>{primary_data.erf_number or ''}</td>
-            <td>{primary_data.intercom_code or ''}</td>
+            <td class="{intercom_class}">{current_intercom}</td>
         </tr>"""
         
         html_content += """
@@ -1226,13 +1279,42 @@ def export_gate_register_changes():
     <h2>Change Summary</h2>
     <ul>"""
         
-        # Add change summary
+        # Add change summary with color coding
+        critical_changes = []
+        non_critical_changes = []
+        
         for user_uuid, changes in changes_by_user.items():
             user = User.query.filter_by(id=user_uuid).first()
             if user:
                 for field, change_info in changes.items():
-                    html_content += f"""
-        <li><strong>{user.email}</strong> - {field}: Changed from "{change_info['old_value']}" to "{change_info['new_value']}"</li>"""
+                    change_text = f"<strong>{user.email}</strong> - {field}: Changed from \"{change_info['old_value']}\" to \"{change_info['new_value']}\""
+                    
+                    if change_info.get('is_critical', False):
+                        critical_changes.append(change_text)
+                    else:
+                        non_critical_changes.append(change_text)
+        
+        # Display critical changes
+        if critical_changes:
+            html_content += """
+    <h3 style="color: #ff6b6b;">Critical Changes (Red)</h3>
+    <ul>"""
+            for change in critical_changes:
+                html_content += f"""
+        <li style="color: #ff6b6b;">{change}</li>"""
+            html_content += """
+    </ul>"""
+        
+        # Display non-critical changes
+        if non_critical_changes:
+            html_content += """
+    <h3 style="color: #4CAF50;">Non-Critical Changes (Green)</h3>
+    <ul>"""
+            for change in non_critical_changes:
+                html_content += f"""
+        <li style="color: #4CAF50;">{change}</li>"""
+            html_content += """
+    </ul>"""
         
         html_content += """
     </ul>
@@ -1704,6 +1786,43 @@ def add_resident_vehicle(user_id):
         
         db.session.add(vehicle)
         db.session.commit()
+        
+        # Log vehicle addition for admin change tracking
+        try:
+            # Get user display name and ERF number for logging
+            if user.resident:
+                user_name = f"{user.resident.first_name} {user.resident.last_name}".strip()
+                erf_number = user.resident.erf_number or 'Unknown'
+            elif user.owner:
+                user_name = f"{user.owner.first_name} {user.owner.last_name}".strip()
+                erf_number = user.owner.erf_number or 'Unknown'
+            else:
+                user_name = user.email
+                erf_number = 'Unknown'
+            
+            # Log the new vehicle addition by admin
+            log_user_change(
+                user.id, 
+                user_name, 
+                erf_number, 
+                'admin_add', 
+                'vehicle_registration', 
+                'None', 
+                data['registration_number']
+            )
+            
+            # Also log other vehicle details if provided
+            if data.get('make'):
+                log_user_change(user.id, user_name, erf_number, 'admin_add', 'vehicle_make', 'None', data['make'])
+            
+            if data.get('model'):
+                log_user_change(user.id, user_name, erf_number, 'admin_add', 'vehicle_model', 'None', data['model'])
+            
+            if data.get('color'):
+                log_user_change(user.id, user_name, erf_number, 'admin_add', 'vehicle_color', 'None', data['color'])
+                
+        except Exception as log_error:
+            print(f"Error logging admin vehicle addition: {log_error}")
         
         return jsonify({
             'message': 'Vehicle added successfully',

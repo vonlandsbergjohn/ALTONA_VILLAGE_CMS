@@ -89,6 +89,43 @@ def add_vehicle():
         db.session.add(vehicle)
         db.session.commit()
         
+        # Log vehicle addition for change tracking
+        try:
+            # Get user display name and ERF number for logging
+            if resident_data:
+                user_name = f"{resident_data.first_name} {resident_data.last_name}".strip()
+                erf_number = resident_data.erf_number or 'Unknown'
+            elif owner_data:
+                user_name = f"{owner_data.first_name} {owner_data.last_name}".strip()
+                erf_number = owner_data.erf_number or 'Unknown'
+            else:
+                user_name = user.email
+                erf_number = 'Unknown'
+            
+            # Log the new vehicle addition
+            log_user_change(
+                user.id, 
+                user_name, 
+                erf_number, 
+                'user_add', 
+                'vehicle_registration', 
+                'None', 
+                data['registration_number']
+            )
+            
+            # Also log other vehicle details if provided
+            if data.get('make'):
+                log_user_change(user.id, user_name, erf_number, 'user_add', 'vehicle_make', 'None', data['make'])
+            
+            if data.get('model'):
+                log_user_change(user.id, user_name, erf_number, 'user_add', 'vehicle_model', 'None', data['model'])
+            
+            if data.get('color'):
+                log_user_change(user.id, user_name, erf_number, 'user_add', 'vehicle_color', 'None', data['color'])
+                
+        except Exception as log_error:
+            print(f"Error logging user vehicle addition: {log_error}")
+        
         return jsonify(vehicle.to_dict()), 201
         
     except Exception as e:

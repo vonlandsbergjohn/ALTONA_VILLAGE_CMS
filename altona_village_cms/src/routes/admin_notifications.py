@@ -89,19 +89,76 @@ def log_user_change(user_id, user_name, erf_number, change_type, field_name, old
     ''', (user_id, user_name, erf_number, change_type, field_name, old_value, new_value))
     
     conn.commit()
+    
+    # Cleanup old processed records to prevent database bloat
+    # Keep only last 1000 processed records and all unprocessed records
+    cursor.execute('''
+        DELETE FROM user_changes 
+        WHERE admin_reviewed = TRUE 
+        AND id NOT IN (
+            SELECT id FROM user_changes 
+            WHERE admin_reviewed = TRUE 
+            ORDER BY change_timestamp DESC 
+            LIMIT 1000
+        )
+    ''')
+    
+    conn.commit()
     conn.close()
+
+def cleanup_old_changes():
+    """Cleanup old processed changes to prevent database bloat"""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Delete processed records older than 6 months, keeping only 1000 most recent
+        cursor.execute('''
+            DELETE FROM user_changes 
+            WHERE admin_reviewed = TRUE 
+            AND change_timestamp < datetime('now', '-6 months')
+            AND id NOT IN (
+                SELECT id FROM user_changes 
+                WHERE admin_reviewed = TRUE 
+                ORDER BY change_timestamp DESC 
+                LIMIT 1000
+            )
+        ''')
+        
+        deleted_count = cursor.rowcount
+        conn.commit()
+        conn.close()
+        
+        return deleted_count
+        
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+        return 0
 
 @admin_notifications.route('/admin/changes/pending', methods=['GET'])
 @admin_required
 def get_pending_changes():
-    """Get all unreviewed changes, prioritizing critical fields"""
+    """Get all unreviewed changes, prioritizing critical fields with pagination support"""
     try:
+        # Get pagination parameters from query string
+        from flask import request
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))  # Default 50 per page
+        offset = (page - 1) * per_page
+        
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
         # Critical fields that need immediate attention
         critical_fields = ['cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
         
+        # Get total count first
+        cursor.execute('''
+            SELECT COUNT(*) FROM user_changes WHERE admin_reviewed = FALSE
+        ''')
+        total_count = cursor.fetchone()[0]
+        
+        # Get paginated results
         cursor.execute('''
             SELECT 
                 id, user_id, user_name, erf_number, change_type, field_name, 
@@ -120,7 +177,8 @@ def get_pending_changes():
                     ELSE 1 
                 END,
                 change_timestamp DESC
-        ''')
+            LIMIT ? OFFSET ?
+        ''', (per_page, offset))
         
         changes = []
         for row in cursor.fetchall():
@@ -138,17 +196,55 @@ def get_pending_changes():
                 'priority': row[10]
             })
         
+        # Get critical count
+        cursor.execute('''
+            SELECT COUNT(*) FROM user_changes 
+            WHERE admin_reviewed = FALSE 
+            AND field_name IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')
+        ''')
+        critical_count = cursor.fetchone()[0]
+        
         conn.close()
+        
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
+        has_next = page < total_pages
+        has_prev = page > 1
         
         return jsonify({
             'success': True,
             'changes': changes,
-            'total_pending': len(changes),
-            'critical_pending': len([c for c in changes if c['priority'] == 'critical'])
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total_count': total_count,
+                'total_pages': total_pages,
+                'has_next': has_next,
+                'has_prev': has_prev
+            },
+            'total_pending': total_count,
+            'critical_pending': critical_count,
+            'showing_count': len(changes)
         })
         
     except Exception as e:
-        return jsonify({'error': f'Failed to fetch pending changes: {str(e)}'}), 500
+                return jsonify({'error': f'Failed to mark changes as reviewed: {str(e)}'}), 500
+
+@admin_notifications.route('/admin/changes/cleanup', methods=['POST'])
+@admin_required
+def cleanup_processed_changes():
+    """Cleanup old processed changes to free up database space"""
+    try:
+        deleted_count = cleanup_old_changes()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Cleanup completed. Deleted {deleted_count} old processed records.',
+            'deleted_count': deleted_count
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to cleanup changes: {str(e)}'}), 500
 
 @admin_notifications.route('/admin/changes/critical', methods=['GET'])
 @admin_required
@@ -194,6 +290,85 @@ def get_critical_changes():
         
     except Exception as e:
         return jsonify({'error': f'Failed to fetch critical changes: {str(e)}'}), 500
+
+@admin_notifications.route('/admin/changes/non-critical', methods=['GET'])
+@admin_required
+def get_non_critical_changes():
+    """Get non-critical changes (all fields except cellphone and vehicle registration)"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)  # Default 50 per page
+        show_reviewed = request.args.get('show_reviewed', 'false').lower() == 'true'
+        
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Build query conditions
+        conditions = ["field_name NOT IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')"]
+        if not show_reviewed:
+            conditions.append("admin_reviewed = FALSE")
+        
+        where_clause = " AND ".join(conditions)
+        
+        # Get total count
+        cursor.execute(f'''
+            SELECT COUNT(*) FROM user_changes 
+            WHERE {where_clause}
+        ''')
+        total_count = cursor.fetchone()[0]
+        
+        # Get paginated results
+        offset = (page - 1) * per_page
+        cursor.execute(f'''
+            SELECT 
+                id, user_id, user_name, erf_number, change_type, field_name, 
+                old_value, new_value, change_timestamp, admin_reviewed, notes
+            FROM user_changes 
+            WHERE {where_clause}
+            ORDER BY change_timestamp DESC
+            LIMIT ? OFFSET ?
+        ''', (per_page, offset))
+        
+        changes = []
+        for row in cursor.fetchall():
+            changes.append({
+                'id': row[0],
+                'user_id': row[1],
+                'user_name': row[2],
+                'erf_number': row[3],
+                'change_type': row[4],
+                'field_name': row[5],
+                'old_value': row[6],
+                'new_value': row[7],
+                'change_timestamp': row[8],
+                'admin_reviewed': row[9],
+                'notes': row[10]
+            })
+        
+        conn.close()
+        
+        # Calculate pagination info
+        total_pages = (total_count + per_page - 1) // per_page
+        has_next = page < total_pages
+        has_prev = page > 1
+        
+        return jsonify({
+            'success': True,
+            'non_critical_changes': changes,
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total_count': total_count,
+                'total_pages': total_pages,
+                'has_next': has_next,
+                'has_prev': has_prev
+            },
+            'count': len(changes),
+            'total_pending': total_count
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch non-critical changes: {str(e)}'}), 500
 
 @admin_notifications.route('/admin/changes/review', methods=['POST'])
 @admin_required
@@ -405,12 +580,37 @@ def get_change_stats():
         ''')
         stats['critical_pending'] = cursor.fetchone()[0]
         
+        # Non-critical changes pending
+        cursor.execute('''
+            SELECT COUNT(*) FROM user_changes 
+            WHERE field_name NOT IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')
+            AND admin_reviewed = FALSE
+        ''')
+        stats['non_critical_pending'] = cursor.fetchone()[0]
+        
         # Total unreviewed
         cursor.execute('''
             SELECT COUNT(*) FROM user_changes 
             WHERE admin_reviewed = FALSE
         ''')
         stats['total_pending'] = cursor.fetchone()[0]
+        
+        # Get breakdown by change type
+        cursor.execute('''
+            SELECT change_type, COUNT(*) FROM user_changes 
+            WHERE admin_reviewed = FALSE
+            GROUP BY change_type
+        ''')
+        stats['by_change_type'] = dict(cursor.fetchall())
+        
+        # Get breakdown by field type
+        cursor.execute('''
+            SELECT field_name, COUNT(*) FROM user_changes 
+            WHERE admin_reviewed = FALSE
+            GROUP BY field_name
+            ORDER BY COUNT(*) DESC
+        ''')
+        stats['by_field_name'] = dict(cursor.fetchall())
         
         conn.close()
         
