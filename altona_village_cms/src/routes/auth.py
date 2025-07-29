@@ -281,9 +281,12 @@ def update_profile():
                 user_name = f"{getattr(user.resident, 'first_name', '') or getattr(user.owner, 'first_name', '')} {getattr(user.resident, 'last_name', '') or getattr(user.owner, 'last_name', '')}".strip()
                 erf_number = getattr(user.resident, 'erf_number', '') or getattr(user.owner, 'erf_number', '') or 'Unknown'
                 
-                # Only track critical fields that affect external systems
+                # Track both critical and non-critical fields
+                # Critical fields affect external systems, non-critical are for record keeping
                 critical_fields = ['phone_number', 'cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
-                if field_name in critical_fields:
+                non_critical_fields = ['erf_number', 'intercom_code', 'full_name', 'property_address']
+                
+                if field_name in critical_fields or field_name in non_critical_fields:
                     try:
                         log_user_change(
                             user_id=user.id,
@@ -460,6 +463,8 @@ def update_profile():
             if 'id_number' in data:
                 resident.id_number = data['id_number']
             if 'erf_number' in data:
+                # Track ERF number changes
+                track_change('erf_number', resident.erf_number, data['erf_number'])
                 resident.erf_number = data['erf_number']
             
             # Update address components
@@ -484,6 +489,8 @@ def update_profile():
             
             # Update intercom code
             if 'intercom_code' in data:
+                # Track intercom code changes
+                track_change('intercom_code', resident.intercom_code, data['intercom_code'])
                 resident.intercom_code = data['intercom_code']
             
             # Update timestamps
@@ -512,6 +519,8 @@ def update_profile():
             if 'id_number' in data:
                 owner.id_number = data['id_number']
             if 'erf_number' in data:
+                # Track ERF number changes
+                track_change('erf_number', owner.erf_number, data['erf_number'])
                 owner.erf_number = data['erf_number']
             if 'title_deed_number' in data:
                 owner.title_deed_number = data['title_deed_number']
@@ -570,6 +579,8 @@ def update_profile():
             
             # Update intercom code
             if 'intercom_code' in data:
+                # Track intercom code changes
+                track_change('intercom_code', owner.intercom_code, data['intercom_code'])
                 owner.intercom_code = data['intercom_code']
             
             # Update timestamps
