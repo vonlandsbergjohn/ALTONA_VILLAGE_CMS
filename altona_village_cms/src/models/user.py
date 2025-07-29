@@ -449,6 +449,186 @@ class ComplaintUpdate(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
+class UserTransitionRequest(db.Model):
+    __tablename__ = 'user_transition_requests'
+    
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    erf_number = db.Column(db.String(50), nullable=False)
+    
+    # Request type and basic info
+    request_type = db.Column(db.String(50), nullable=False)  # 'owner_sale', 'tenant_moveout', 'owner_moving', 'other'
+    current_role = db.Column(db.String(50), nullable=False)  # 'owner', 'tenant', 'owner_resident'
+    
+    # Timeline information
+    intended_moveout_date = db.Column(db.Date)
+    property_transfer_date = db.Column(db.Date)
+    new_occupant_movein_date = db.Column(db.Date)
+    notice_period = db.Column(db.String(50))
+    
+    # Sale specific details
+    sale_agreement_signed = db.Column(db.Boolean, default=False)
+    transfer_attorney = db.Column(db.String(255))
+    expected_transfer_date = db.Column(db.Date)
+    new_owner_details_known = db.Column(db.Boolean, default=False)
+    
+    # Tenant specific details
+    lease_end_date = db.Column(db.Date)
+    moveout_reason = db.Column(db.String(100))  # 'lease_expiry', 'early_termination', 'owner_reclaim', 'other'
+    moveout_reason_other = db.Column(db.String(255))
+    deposit_return_required = db.Column(db.Boolean, default=False)
+    
+    # Owner moving out (renting property)
+    property_management_company = db.Column(db.String(255))
+    new_tenant_selected = db.Column(db.Boolean, default=False)
+    rental_start_date = db.Column(db.Date)
+    
+    # Community services to transfer/cancel
+    gate_access_transfer = db.Column(db.Boolean, default=True)
+    intercom_access_transfer = db.Column(db.Boolean, default=True)
+    vehicle_registration_transfer = db.Column(db.Boolean, default=True)
+    visitor_access_transfer = db.Column(db.Boolean, default=True)
+    community_notifications_transfer = db.Column(db.Boolean, default=True)
+    
+    # Outstanding matters
+    unpaid_levies = db.Column(db.Boolean, default=False)
+    pending_maintenance = db.Column(db.Boolean, default=False)
+    community_violations = db.Column(db.Boolean, default=False)
+    outstanding_matters_other = db.Column(db.Text)
+    
+    # New occupant information (if known)
+    new_occupant_type = db.Column(db.String(50))  # 'new_owner', 'new_tenant', 'unknown'
+    new_occupant_name = db.Column(db.String(255))
+    new_occupant_phone = db.Column(db.String(20))
+    new_occupant_email = db.Column(db.String(255))
+    new_occupant_adults = db.Column(db.Integer)
+    new_occupant_children = db.Column(db.Integer)
+    new_occupant_pets = db.Column(db.Integer)
+    
+    # Special instructions
+    access_handover_requirements = db.Column(db.Text)
+    property_condition_notes = db.Column(db.Text)
+    community_introduction_needs = db.Column(db.Text)
+    
+    # System fields
+    status = db.Column(db.String(50), nullable=False, default='pending_review')  # pending_review, in_progress, awaiting_docs, ready_for_transition, completed, cancelled
+    priority = db.Column(db.String(50), default='standard')  # standard, urgent, emergency
+    assigned_admin = db.Column(db.String(36), db.ForeignKey('users.id'))
+    admin_notes = db.Column(db.Text)
+    
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    completion_date = db.Column(db.DateTime)
+    
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref='transition_requests')
+    admin = db.relationship('User', foreign_keys=[assigned_admin])
+    updates = db.relationship('TransitionRequestUpdate', backref='transition_request', lazy=True, cascade='all, delete-orphan')
+    vehicles = db.relationship('TransitionVehicle', backref='transition_request', lazy=True, cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f'<UserTransitionRequest {self.request_type} - ERF {self.erf_number}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'erf_number': self.erf_number,
+            'request_type': self.request_type,
+            'current_role': self.current_role,
+            'intended_moveout_date': self.intended_moveout_date.isoformat() if self.intended_moveout_date else None,
+            'property_transfer_date': self.property_transfer_date.isoformat() if self.property_transfer_date else None,
+            'new_occupant_movein_date': self.new_occupant_movein_date.isoformat() if self.new_occupant_movein_date else None,
+            'notice_period': self.notice_period,
+            'sale_agreement_signed': self.sale_agreement_signed,
+            'transfer_attorney': self.transfer_attorney,
+            'expected_transfer_date': self.expected_transfer_date.isoformat() if self.expected_transfer_date else None,
+            'new_owner_details_known': self.new_owner_details_known,
+            'lease_end_date': self.lease_end_date.isoformat() if self.lease_end_date else None,
+            'moveout_reason': self.moveout_reason,
+            'moveout_reason_other': self.moveout_reason_other,
+            'deposit_return_required': self.deposit_return_required,
+            'property_management_company': self.property_management_company,
+            'new_tenant_selected': self.new_tenant_selected,
+            'rental_start_date': self.rental_start_date.isoformat() if self.rental_start_date else None,
+            'gate_access_transfer': self.gate_access_transfer,
+            'intercom_access_transfer': self.intercom_access_transfer,
+            'vehicle_registration_transfer': self.vehicle_registration_transfer,
+            'visitor_access_transfer': self.visitor_access_transfer,
+            'community_notifications_transfer': self.community_notifications_transfer,
+            'unpaid_levies': self.unpaid_levies,
+            'pending_maintenance': self.pending_maintenance,
+            'community_violations': self.community_violations,
+            'outstanding_matters_other': self.outstanding_matters_other,
+            'new_occupant_type': self.new_occupant_type,
+            'new_occupant_name': self.new_occupant_name,
+            'new_occupant_phone': self.new_occupant_phone,
+            'new_occupant_email': self.new_occupant_email,
+            'new_occupant_adults': self.new_occupant_adults,
+            'new_occupant_children': self.new_occupant_children,
+            'new_occupant_pets': self.new_occupant_pets,
+            'access_handover_requirements': self.access_handover_requirements,
+            'property_condition_notes': self.property_condition_notes,
+            'community_introduction_needs': self.community_introduction_needs,
+            'status': self.status,
+            'priority': self.priority,
+            'assigned_admin': self.assigned_admin,
+            'admin_notes': self.admin_notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'completion_date': self.completion_date.isoformat() if self.completion_date else None
+        }
+
+class TransitionRequestUpdate(db.Model):
+    __tablename__ = 'transition_request_updates'
+    
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    transition_request_id = db.Column(db.String(36), db.ForeignKey('user_transition_requests.id'), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    update_text = db.Column(db.Text, nullable=False)
+    update_type = db.Column(db.String(50), default='comment')  # comment, status_change, admin_note
+    old_status = db.Column(db.String(50))
+    new_status = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<TransitionRequestUpdate {self.id}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'transition_request_id': self.transition_request_id,
+            'user_id': self.user_id,
+            'update_text': self.update_text,
+            'update_type': self.update_type,
+            'old_status': self.old_status,
+            'new_status': self.new_status,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class TransitionVehicle(db.Model):
+    __tablename__ = 'transition_vehicles'
+    
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    transition_request_id = db.Column(db.String(36), db.ForeignKey('user_transition_requests.id'), nullable=False)
+    vehicle_make = db.Column(db.String(100))
+    vehicle_model = db.Column(db.String(100))
+    license_plate = db.Column(db.String(50))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<TransitionVehicle {self.license_plate}>'
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'transition_request_id': self.transition_request_id,
+            'vehicle_make': self.vehicle_make,
+            'vehicle_model': self.vehicle_model,
+            'license_plate': self.license_plate,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 class GateAccessLog(db.Model):
     __tablename__ = 'gate_access_logs'
     
