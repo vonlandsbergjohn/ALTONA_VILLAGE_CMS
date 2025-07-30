@@ -53,12 +53,14 @@ const UserTransitionRequest = () => {
     
     // New occupant info
     new_occupant_type: '',
-    new_occupant_name: '',
+    new_occupant_first_name: '',
+    new_occupant_last_name: '',
     new_occupant_phone: '',
     new_occupant_email: '',
-    new_occupant_adults: '',
-    new_occupant_children: '',
-    new_occupant_pets: '',
+    new_occupant_id_number: '',
+    new_occupant_adults: 0,
+    new_occupant_children: 0,
+    new_occupant_pets: 0,
     
     // Special instructions
     access_handover_requirements: '',
@@ -159,6 +161,10 @@ const UserTransitionRequest = () => {
         expected_transfer_date: formData.expected_transfer_date ? format(formData.expected_transfer_date, 'yyyy-MM-dd') : null,
         lease_end_date: formData.lease_end_date ? format(formData.lease_end_date, 'yyyy-MM-dd') : null,
         rental_start_date: formData.rental_start_date ? format(formData.rental_start_date, 'yyyy-MM-dd') : null,
+        // Clean up integer fields - convert empty strings to null
+        new_occupant_adults: formData.new_occupant_adults === '' ? null : parseInt(formData.new_occupant_adults) || 0,
+        new_occupant_children: formData.new_occupant_children === '' ? null : parseInt(formData.new_occupant_children) || 0,
+        new_occupant_pets: formData.new_occupant_pets === '' ? null : parseInt(formData.new_occupant_pets) || 0,
       };
 
       const response = await fetch('/api/transition/request', {
@@ -603,14 +609,29 @@ const UserTransitionRequest = () => {
                 {formData.new_occupant_type !== 'unknown' && (
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
-                      <Label htmlFor="new_occupant_name">Full Name</Label>
+                      <Label htmlFor="new_occupant_first_name">First Name</Label>
                       <Input
-                        id="new_occupant_name"
-                        value={formData.new_occupant_name}
-                        onChange={(e) => handleInputChange('new_occupant_name', e.target.value)}
+                        id="new_occupant_first_name"
+                        value={formData.new_occupant_first_name}
+                        onChange={(e) => handleInputChange('new_occupant_first_name', e.target.value)}
+                        required
                       />
                     </div>
                     
+                    <div>
+                      <Label htmlFor="new_occupant_last_name">Last Name</Label>
+                      <Input
+                        id="new_occupant_last_name"
+                        value={formData.new_occupant_last_name}
+                        onChange={(e) => handleInputChange('new_occupant_last_name', e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {formData.new_occupant_type !== 'unknown' && (
+                  <div className="grid md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="new_occupant_phone">Phone Number</Label>
                       <Input
@@ -630,6 +651,20 @@ const UserTransitionRequest = () => {
                       />
                     </div>
                     
+                    <div>
+                      <Label htmlFor="new_occupant_id_number">ID Number</Label>
+                      <Input
+                        id="new_occupant_id_number"
+                        value={formData.new_occupant_id_number}
+                        onChange={(e) => handleInputChange('new_occupant_id_number', e.target.value)}
+                        placeholder="For user account creation"
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {formData.new_occupant_type !== 'unknown' && (
+                  <div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <Label htmlFor="new_occupant_adults">Adults</Label>

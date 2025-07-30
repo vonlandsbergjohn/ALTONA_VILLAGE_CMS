@@ -14,7 +14,8 @@ import {
   Phone,
   Mail,
   MapPin,
-  KeyRound
+  KeyRound,
+  ArrowRightLeft
 } from 'lucide-react';
 
 const ResidentDashboard = () => {
@@ -204,7 +205,7 @@ const ResidentDashboard = () => {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
@@ -263,6 +264,40 @@ const ResidentDashboard = () => {
               <Plus className="h-4 w-4 mr-2" />
               Submit New Complaint
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <ArrowRightLeft className="h-5 w-5 mr-2" />
+              Property Transition
+            </CardTitle>
+            <CardDescription>
+              Moving, selling, or changing occupancy
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-600 mb-4">
+              Planning to move out, sell your property, or change tenancy? 
+              Submit a transition request to ensure a smooth process.
+            </p>
+            <div className="space-y-2">
+              <Button 
+                onClick={() => window.location.href = '/resident/transition-request/new'}
+                className="w-full"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Request
+              </Button>
+              <Button 
+                onClick={() => window.location.href = '/resident/transition-requests'}
+                variant="outline"
+                className="w-full"
+              >
+                View My Requests
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

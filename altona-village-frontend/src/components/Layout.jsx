@@ -14,7 +14,8 @@ import {
   Shield,
   User,
   Clock,
-  Bell
+  Bell,
+  ArrowRightLeft
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -27,6 +28,7 @@ const Layout = ({ children }) => {
     { icon: Building, label: 'Properties', path: '/admin/properties' },
     { icon: Shield, label: 'Gate Register', path: '/admin/gate-register' },
     { icon: MessageSquare, label: 'Complaints', path: '/admin/complaints' },
+    { icon: ArrowRightLeft, label: 'Transition Requests', path: '/admin/transition-requests' },
     { icon: Clock, label: 'Pending Approvals', path: '/admin/pending' },
     { icon: Bell, label: 'System Notifications', path: '/admin/notifications' },
     { icon: Settings, label: 'Communication', path: '/admin/communication' },
@@ -38,6 +40,7 @@ const Layout = ({ children }) => {
     { icon: Building, label: 'My Property', path: '/resident/property' },
     { icon: Car, label: 'My Vehicles', path: '/resident/vehicles' },
     { icon: MessageSquare, label: 'My Complaints', path: '/resident/complaints' },
+    { icon: ArrowRightLeft, label: 'Transition Requests', path: '/resident/transition-requests' },
   ];
 
   const navItems = isAdmin ? adminNavItems : residentNavItems;

@@ -84,8 +84,12 @@ def create_transition_request():
         # Set integer fields
         integer_fields = ['new_occupant_adults', 'new_occupant_children', 'new_occupant_pets']
         for field in integer_fields:
-            if field in data and data[field] is not None:
-                setattr(transition_request, field, int(data.get(field)))
+            if field in data and data[field] is not None and data[field] != '':
+                try:
+                    setattr(transition_request, field, int(data.get(field)))
+                except (ValueError, TypeError):
+                    # If conversion fails, set to None or 0
+                    setattr(transition_request, field, 0)
         
         # Set priority based on notice period
         if 'intended_moveout_date' in data and data['intended_moveout_date']:
@@ -275,6 +279,41 @@ def get_all_transition_requests():
         current_app.logger.error(f"Error fetching admin transition requests: {str(e)}")
         return jsonify({'error': 'Failed to fetch requests'}), 500
 
+@transition_bp.route('/admin/request/<request_id>', methods=['GET'])
+@jwt_required()
+def get_admin_transition_request_details(request_id):
+    """Get detailed transition request information for admin"""
+    try:
+        current_user = User.query.get(get_jwt_identity())
+        
+        if current_user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        request = UserTransitionRequest.query.filter_by(id=request_id).first()
+        
+        if not request:
+            return jsonify({'error': 'Request not found'}), 404
+        
+        # Get associated updates
+        updates = TransitionRequestUpdate.query.filter_by(
+            transition_request_id=request_id
+        ).order_by(TransitionRequestUpdate.created_at.desc()).all()
+        
+        # Get associated vehicles
+        vehicles = TransitionVehicle.query.filter_by(
+            transition_request_id=request_id
+        ).all()
+        
+        request_data = request.to_dict()
+        request_data['updates'] = [update.to_dict() for update in updates]
+        request_data['vehicles'] = [vehicle.to_dict() for vehicle in vehicles]
+        
+        return jsonify(request_data), 200
+        
+    except Exception as e:
+        current_app.logger.error(f"Error fetching admin transition request details: {str(e)}")
+        return jsonify({'error': 'Failed to fetch request details'}), 500
+
 @transition_bp.route('/admin/request/<request_id>/assign', methods=['PUT'])
 @jwt_required()
 def assign_transition_request(request_id):
@@ -384,6 +423,65 @@ def update_transition_request_status(request_id):
         db.session.rollback()
         current_app.logger.error(f"Error updating transition request status: {str(e)}")
         return jsonify({'error': 'Failed to update status'}), 500
+
+@transition_bp.route('/admin/request/<request_id>/update', methods=['POST'])
+@jwt_required()
+def add_admin_update_to_request(request_id):
+    """Add admin update to transition request"""
+    try:
+        current_user = User.query.get(get_jwt_identity())
+        
+        if current_user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        transition_request = UserTransitionRequest.query.filter_by(id=request_id).first()
+        
+        if not transition_request:
+            return jsonify({'error': 'Request not found'}), 404
+        
+        data = request.get_json()
+        update_text = data.get('update_text', '').strip()
+        update_type = data.get('update_type', 'admin_response')
+        new_status = data.get('status')  # Optional status change
+        
+        if not update_text:
+            return jsonify({'error': 'Update text is required'}), 400
+        
+        # Handle status change if provided
+        old_status = None
+        if new_status and new_status != transition_request.status:
+            old_status = transition_request.status
+            transition_request.status = new_status
+            transition_request.updated_at = datetime.utcnow()
+            
+            # Set completion date if status is completed
+            if new_status == 'completed':
+                transition_request.completion_date = datetime.utcnow()
+        
+        # Create the update
+        update = TransitionRequestUpdate(
+            transition_request_id=request_id,
+            user_id=current_user.id,
+            update_text=update_text,
+            update_type=update_type,
+            old_status=old_status,
+            new_status=new_status if old_status else None
+        )
+        
+        db.session.add(update)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Update added successfully',
+            'update': update.to_dict(),
+            'old_status': old_status,
+            'new_status': new_status if old_status else transition_request.status
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error adding admin update: {str(e)}")
+        return jsonify({'error': 'Failed to add update'}), 500
 
 @transition_bp.route('/stats', methods=['GET'])
 @jwt_required()

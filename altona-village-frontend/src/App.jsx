@@ -8,6 +8,7 @@ import AdminDashboard from '@/components/AdminDashboard';
 import AdminComplaints from '@/components/AdminComplaints';
 import AdminResidents from '@/components/AdminResidents';
 import AdminNotificationsDashboard from '@/components/AdminNotificationsDashboard';
+import AdminTransitionRequests from '@/components/AdminTransitionRequests';
 import GateRegister from '@/components/GateRegister';
 import PendingRegistrations from './components/PendingRegistrations';
 import ResidentDashboard from '@/components/ResidentDashboard';
@@ -15,6 +16,8 @@ import ProfileManagement from '@/components/ProfileManagement';
 import VehicleManagement from '@/components/VehicleManagement';
 import MyComplaints from '@/components/MyComplaints';
 import MyProperty from '@/components/MyProperty';
+import UserTransitionRequest from '@/components/UserTransitionRequest';
+import MyTransitionRequests from '@/components/MyTransitionRequests';
 import './App.css';
 
 // Simple router component
@@ -97,6 +100,8 @@ const Router = () => {
           return <GateRegister />;
         case '/admin/complaints':
           return <AdminComplaints />;
+        case '/admin/transition-requests':
+          return <AdminTransitionRequests />;
         case '/admin/pending':
           return <PendingRegistrations />;
         case '/admin/notifications':
@@ -125,6 +130,10 @@ const Router = () => {
           break;
         case '/resident/complaints':
           return <MyComplaints />;
+        case '/resident/transition-requests':
+          return <MyTransitionRequests />;
+        case '/resident/transition-request/new':
+          return <UserTransitionRequest />;
         default:
           return <ResidentDashboard />;
       }

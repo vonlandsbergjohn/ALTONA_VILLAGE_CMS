@@ -2,54 +2,57 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { CalendarIcon, ClockIcon, UserIcon, MessageSquareIcon, CarIcon, RefreshCwIcon } from 'lucide-react';
+import { Alert, AlertDescription } from './ui/alert';
+import { 
+  ArrowRightLeft, 
+  Search, 
+  Filter, 
+  CalendarIcon, 
+  ClockIcon, 
+  UserIcon, 
+  MessageSquareIcon, 
+  CarIcon,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  X
+} from 'lucide-react';
 import { format } from 'date-fns';
 
-const MyTransitionRequests = () => {
+const AdminTransitionRequests = () => {
   const [requests, setRequests] = useState([]);
+  const [filteredRequests, setFilteredRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [selectedRequest, setSelectedRequest] = useState(null);
-  const [newUpdate, setNewUpdate] = useState('');
-  const [updatingRequest, setUpdatingRequest] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [updateLoading, setUpdateLoading] = useState(false);
+
+  // Update form state
+  const [statusUpdate, setStatusUpdate] = useState('');
+  const [adminNotes, setAdminNotes] = useState('');
+  const [updateText, setUpdateText] = useState('');
 
   useEffect(() => {
     fetchRequests();
   }, []);
 
-  // Auto-refresh every 30 seconds when user is active
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (!loading && !refreshing) {
-        refreshData();
-      }
-    }, 30000); // 30 seconds
-
-    return () => clearInterval(interval);
-  }, [loading, refreshing]);
-
-  // Focus refresh - refresh when window gains focus
-  useEffect(() => {
-    const handleFocus = () => {
-      if (!loading && !refreshing) {
-        refreshData();
-      }
-    };
-
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, [loading, refreshing]);
+    filterRequests();
+  }, [requests, searchTerm, statusFilter, typeFilter]);
 
   const fetchRequests = async () => {
     try {
-      setRefreshing(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/transition/requests', {
+      const response = await fetch('/api/transition/admin/requests', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -59,7 +62,6 @@ const MyTransitionRequests = () => {
       if (response.ok) {
         const data = await response.json();
         setRequests(data.requests);
-        setLastRefresh(new Date());
       } else {
         setError('Failed to fetch requests');
       }
@@ -68,22 +70,13 @@ const MyTransitionRequests = () => {
       console.error('Error fetching requests:', error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const refreshData = async () => {
-    await fetchRequests();
-    // If a request is selected, refresh its details too
-    if (selectedRequest) {
-      await fetchRequestDetails(selectedRequest.id);
     }
   };
 
   const fetchRequestDetails = async (requestId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/transition/request/${requestId}`, {
+      const response = await fetch(`/api/transition/admin/request/${requestId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -93,13 +86,8 @@ const MyTransitionRequests = () => {
       if (response.ok) {
         const data = await response.json();
         setSelectedRequest(data);
-        
-        // Update the main list with fresh status info
-        setRequests(prev => prev.map(req => 
-          req.id === requestId 
-            ? { ...req, status: data.status, priority: data.priority, updated_at: data.updated_at }
-            : req
-        ));
+        setStatusUpdate(data.status);
+        setAdminNotes(data.admin_notes || '');
       } else {
         setError('Failed to fetch request details');
       }
@@ -109,21 +97,58 @@ const MyTransitionRequests = () => {
     }
   };
 
-  const addUpdate = async () => {
-    if (!newUpdate.trim()) return;
+  const updateRequestStatus = async () => {
+    if (!selectedRequest) return;
 
-    setUpdatingRequest(true);
+    setUpdateLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`/api/transition/request/${selectedRequest.id}/update`, {
+      const response = await fetch(`/api/transition/admin/request/${selectedRequest.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: statusUpdate,
+          admin_notes: adminNotes
+        })
+      });
+
+      if (response.ok) {
+        setSuccess('Request status updated successfully');
+        fetchRequests();
+        setSelectedRequest(prev => ({
+          ...prev,
+          status: statusUpdate,
+          admin_notes: adminNotes
+        }));
+      } else {
+        setError('Failed to update request status');
+      }
+    } catch (error) {
+      setError('Network error. Please try again.');
+      console.error('Error updating request status:', error);
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
+  const addAdminUpdate = async () => {
+    if (!updateText.trim() || !selectedRequest) return;
+
+    setUpdateLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/transition/admin/request/${selectedRequest.id}/update`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          update_text: newUpdate,
-          update_type: 'comment'
+          update_text: updateText,
+          update_type: 'admin_response'
         })
       });
 
@@ -133,7 +158,8 @@ const MyTransitionRequests = () => {
           ...prev,
           updates: [data.update, ...prev.updates]
         }));
-        setNewUpdate('');
+        setUpdateText('');
+        setSuccess('Update added successfully');
       } else {
         setError('Failed to add update');
       }
@@ -141,8 +167,33 @@ const MyTransitionRequests = () => {
       setError('Network error. Please try again.');
       console.error('Error adding update:', error);
     } finally {
-      setUpdatingRequest(false);
+      setUpdateLoading(false);
     }
+  };
+
+  const filterRequests = () => {
+    let filtered = requests;
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(request => 
+        request.erf_number.toString().includes(searchTerm) ||
+        request.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        request.request_type.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(request => request.status === statusFilter);
+    }
+
+    // Type filter
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter(request => request.request_type === typeFilter);
+    }
+
+    setFilteredRequests(filtered);
   };
 
   const getStatusColor = (status) => {
@@ -181,74 +232,139 @@ const MyTransitionRequests = () => {
     return format(new Date(dateString), 'PPP');
   };
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-green-600" />;
+      case 'cancelled':
+        return <X className="h-4 w-4 text-red-600" />;
+      case 'in_progress':
+        return <Clock className="h-4 w-4 text-blue-600" />;
+      default:
+        return <AlertCircle className="h-4 w-4 text-yellow-600" />;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="text-lg">Loading requests...</div>
+        <div className="text-lg">Loading transition requests...</div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">My Transition Requests</h1>
-          <div className="flex items-center space-x-4">
-            <p className="text-gray-600">Track your property transition requests and communicate with admin</p>
-            {lastRefresh && (
-              <p className="text-xs text-gray-400">
-                Last updated: {format(lastRefresh, 'HH:mm:ss')}
-              </p>
-            )}
-          </div>
-        </div>
-        <div className="space-x-2">
-          <Button 
-            variant="outline" 
-            onClick={refreshData}
-            disabled={refreshing}
-          >
-            <RefreshCwIcon className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </Button>
-          <Button onClick={() => window.location.href = '/resident/transition-request/new'}>
-            New Request
-          </Button>
+          <h1 className="text-2xl font-bold flex items-center">
+            <ArrowRightLeft className="h-6 w-6 mr-2" />
+            Transition Requests Management
+          </h1>
+          <p className="text-gray-600">Manage property transition requests from residents</p>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md">
-          <p className="text-red-600">{error}</p>
-        </div>
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-600">{error}</AlertDescription>
+        </Alert>
       )}
 
-      {requests.length === 0 ? (
+      {success && (
+        <Alert className="border-green-200 bg-green-50">
+          <CheckCircle className="h-4 w-4 text-green-600" />
+          <AlertDescription className="text-green-600">{success}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filters */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Search</label>
+              <div className="relative">
+                <Search className="h-4 w-4 absolute left-3 top-3 text-gray-400" />
+                <Input
+                  placeholder="ERF, email, or type..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending_review">Pending Review</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="awaiting_docs">Awaiting Documents</SelectItem>
+                  <SelectItem value="ready_for_transition">Ready for Transition</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Request Type</label>
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="owner_sale">Owner Sale</SelectItem>
+                  <SelectItem value="tenant_moveout">Tenant Move-Out</SelectItem>
+                  <SelectItem value="owner_moving">Owner Moving</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Results</label>
+              <div className="text-sm text-gray-600 pt-2">
+                {filteredRequests.length} of {requests.length} requests
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Requests List */}
+      {filteredRequests.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <div className="text-gray-500 mb-4">
-              <CalendarIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p className="text-lg">No transition requests found</p>
-              <p className="text-sm">Submit your first request to get started</p>
-            </div>
-            <Button onClick={() => window.location.href = '/resident/transition-request/new'}>
-              Create First Request
-            </Button>
+            <ArrowRightLeft className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+            <p className="text-lg text-gray-500">No transition requests found</p>
+            <p className="text-sm text-gray-400">Adjust your filters or wait for new requests</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6">
-          {requests.map((request) => (
+        <div className="grid gap-4">
+          {filteredRequests.map((request) => (
             <Card key={request.id} className="hover:shadow-md transition-shadow">
               <CardHeader>
                 <div className="flex justify-between items-start">
                   <div>
                     <CardTitle className="flex items-center space-x-2">
+                      {getStatusIcon(request.status)}
                       <span>ERF {request.erf_number} - {formatRequestType(request.request_type)}</span>
                     </CardTitle>
                     <CardDescription>
-                      Created {format(new Date(request.created_at), 'PPP')}
+                      {request.user_email} • Created {format(new Date(request.created_at), 'PPp')}
                     </CardDescription>
                   </div>
                   <div className="flex space-x-2">
@@ -262,27 +378,19 @@ const MyTransitionRequests = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid md:grid-cols-2 gap-4 mb-4">
+                <div className="grid md:grid-cols-3 gap-4 mb-4">
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
                     <CalendarIcon className="h-4 w-4" />
                     <span>Move-out: {formatDate(request.intended_moveout_date)}</span>
                   </div>
-                  {request.property_transfer_date && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600">
-                      <ClockIcon className="h-4 w-4" />
-                      <span>Transfer: {formatDate(request.property_transfer_date)}</span>
-                    </div>
-                  )}
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
                     <UserIcon className="h-4 w-4" />
-                    <span>Role: {request.current_role.replace('_', ' ')}</span>
+                    <span>Role: {request.current_role?.replace('_', ' ')}</span>
                   </div>
-                  {request.notice_period && (
-                    <div className="flex items-center space-x-2 text-sm text-gray-600">
-                      <ClockIcon className="h-4 w-4" />
-                      <span>Notice: {request.notice_period}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center space-x-2 text-sm text-gray-600">
+                    <ClockIcon className="h-4 w-4" />
+                    <span>Last updated: {format(new Date(request.updated_at), 'PPp')}</span>
+                  </div>
                 </div>
 
                 <div className="flex justify-end">
@@ -292,55 +400,38 @@ const MyTransitionRequests = () => {
                         variant="outline" 
                         onClick={() => fetchRequestDetails(request.id)}
                       >
-                        View Details
+                        Manage Request
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <DialogTitle>
-                              Transition Request - ERF {request.erf_number}
-                            </DialogTitle>
-                            <DialogDescription>
-                              {formatRequestType(request.request_type)} request details and updates
-                            </DialogDescription>
-                          </div>
-                          <div className="text-right">
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => fetchRequestDetails(request.id)}
-                              disabled={refreshing}
-                            >
-                              <RefreshCwIcon className={`h-3 w-3 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-                              Refresh
-                            </Button>
-                            {selectedRequest && selectedRequest.updated_at && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                Last updated: {format(new Date(selectedRequest.updated_at), 'PPp')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
+                        <DialogTitle>
+                          Manage Request - ERF {request.erf_number}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {formatRequestType(request.request_type)} request management
+                        </DialogDescription>
                       </DialogHeader>
 
                       {selectedRequest && selectedRequest.id === request.id && (
                         <Tabs defaultValue="details" className="w-full">
-                          <TabsList className="grid w-full grid-cols-3">
+                          <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="details">Details</TabsTrigger>
+                            <TabsTrigger value="manage">Manage</TabsTrigger>
                             <TabsTrigger value="updates">Updates</TabsTrigger>
                             <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
                           </TabsList>
 
                           <TabsContent value="details" className="space-y-4">
+                            {/* Same details content as in MyTransitionRequests but read-only */}
                             <div className="grid md:grid-cols-2 gap-4">
                               <div>
                                 <h4 className="font-semibold mb-2">Basic Information</h4>
                                 <div className="space-y-1 text-sm">
+                                  <p><strong>User:</strong> {selectedRequest.user_email}</p>
                                   <p><strong>ERF:</strong> {selectedRequest.erf_number}</p>
                                   <p><strong>Type:</strong> {formatRequestType(selectedRequest.request_type)}</p>
-                                  <p><strong>Role:</strong> {selectedRequest.current_role.replace('_', ' ')}</p>
+                                  <p><strong>Role:</strong> {selectedRequest.current_role?.replace('_', ' ')}</p>
                                   <p><strong>Status:</strong> <Badge className={getStatusColor(selectedRequest.status)}>{selectedRequest.status.replace('_', ' ')}</Badge></p>
                                   <p><strong>Priority:</strong> <Badge className={getPriorityColor(selectedRequest.priority)}>{selectedRequest.priority}</Badge></p>
                                 </div>
@@ -361,43 +452,6 @@ const MyTransitionRequests = () => {
                               </div>
                             </div>
 
-                            {selectedRequest.request_type === 'owner_sale' && (
-                              <div>
-                                <h4 className="font-semibold mb-2">Sale Details</h4>
-                                <div className="grid md:grid-cols-2 gap-4 text-sm">
-                                  <p><strong>Agreement Signed:</strong> {selectedRequest.sale_agreement_signed ? 'Yes' : 'No'}</p>
-                                  <p><strong>Transfer Attorney:</strong> {selectedRequest.transfer_attorney || 'Not specified'}</p>
-                                  <p><strong>Expected Transfer:</strong> {formatDate(selectedRequest.expected_transfer_date)}</p>
-                                  <p><strong>New Owner Known:</strong> {selectedRequest.new_owner_details_known ? 'Yes' : 'No'}</p>
-                                </div>
-                              </div>
-                            )}
-
-                            {selectedRequest.request_type === 'tenant_moveout' && (
-                              <div>
-                                <h4 className="font-semibold mb-2">Move-out Details</h4>
-                                <div className="grid md:grid-cols-2 gap-4 text-sm">
-                                  <p><strong>Lease End:</strong> {formatDate(selectedRequest.lease_end_date)}</p>
-                                  <p><strong>Reason:</strong> {selectedRequest.moveout_reason?.replace('_', ' ') || 'Not specified'}</p>
-                                  {selectedRequest.moveout_reason_other && (
-                                    <p><strong>Other Reason:</strong> {selectedRequest.moveout_reason_other}</p>
-                                  )}
-                                  <p><strong>Deposit Return:</strong> {selectedRequest.deposit_return_required ? 'Required' : 'Not required'}</p>
-                                </div>
-                              </div>
-                            )}
-
-                            {selectedRequest.request_type === 'owner_moving' && (
-                              <div>
-                                <h4 className="font-semibold mb-2">Rental Details</h4>
-                                <div className="grid md:grid-cols-2 gap-4 text-sm">
-                                  <p><strong>Property Manager:</strong> {selectedRequest.property_management_company || 'Not specified'}</p>
-                                  <p><strong>Tenant Selected:</strong> {selectedRequest.new_tenant_selected ? 'Yes' : 'No'}</p>
-                                  <p><strong>Rental Start:</strong> {formatDate(selectedRequest.rental_start_date)}</p>
-                                </div>
-                              </div>
-                            )}
-
                             {selectedRequest.new_occupant_name && (
                               <div>
                                 <h4 className="font-semibold mb-2">New Occupant Information</h4>
@@ -412,67 +466,73 @@ const MyTransitionRequests = () => {
                                 </div>
                               </div>
                             )}
+                          </TabsContent>
 
-                            {(selectedRequest.access_handover_requirements || 
-                              selectedRequest.property_condition_notes || 
-                              selectedRequest.community_introduction_needs) && (
-                              <div>
-                                <h4 className="font-semibold mb-2">Special Instructions</h4>
-                                {selectedRequest.access_handover_requirements && (
-                                  <div className="mb-2">
-                                    <p className="font-medium text-sm">Access Handover:</p>
-                                    <p className="text-sm text-gray-600">{selectedRequest.access_handover_requirements}</p>
-                                  </div>
-                                )}
-                                {selectedRequest.property_condition_notes && (
-                                  <div className="mb-2">
-                                    <p className="font-medium text-sm">Property Condition:</p>
-                                    <p className="text-sm text-gray-600">{selectedRequest.property_condition_notes}</p>
-                                  </div>
-                                )}
-                                {selectedRequest.community_introduction_needs && (
-                                  <div className="mb-2">
-                                    <p className="font-medium text-sm">Introduction Needs:</p>
-                                    <p className="text-sm text-gray-600">{selectedRequest.community_introduction_needs}</p>
-                                  </div>
-                                )}
+                          <TabsContent value="manage" className="space-y-4">
+                            <div className="grid md:grid-cols-2 gap-6">
+                              <div className="space-y-4">
+                                <h4 className="font-semibold">Update Status</h4>
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium">Status</label>
+                                  <Select value={statusUpdate} onValueChange={setStatusUpdate}>
+                                    <SelectTrigger>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="pending_review">Pending Review</SelectItem>
+                                      <SelectItem value="in_progress">In Progress</SelectItem>
+                                      <SelectItem value="awaiting_docs">Awaiting Documents</SelectItem>
+                                      <SelectItem value="ready_for_transition">Ready for Transition</SelectItem>
+                                      <SelectItem value="completed">Completed</SelectItem>
+                                      <SelectItem value="cancelled">Cancelled</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium">Admin Notes</label>
+                                  <Textarea
+                                    value={adminNotes}
+                                    onChange={(e) => setAdminNotes(e.target.value)}
+                                    placeholder="Internal notes (not visible to user)"
+                                    rows="4"
+                                  />
+                                </div>
+                                <Button 
+                                  onClick={updateRequestStatus} 
+                                  disabled={updateLoading}
+                                  className="w-full"
+                                >
+                                  {updateLoading ? 'Updating...' : 'Update Status'}
+                                </Button>
                               </div>
-                            )}
 
-                            {selectedRequest.admin_notes && (
-                              <div>
-                                <h4 className="font-semibold mb-2">Admin Notes</h4>
-                                <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                                  {selectedRequest.admin_notes}
-                                </p>
+                              <div className="space-y-4">
+                                <h4 className="font-semibold">Add Update for User</h4>
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium">Update Message</label>
+                                  <Textarea
+                                    value={updateText}
+                                    onChange={(e) => setUpdateText(e.target.value)}
+                                    placeholder="Message to send to user..."
+                                    rows="4"
+                                  />
+                                </div>
+                                <Button 
+                                  onClick={addAdminUpdate} 
+                                  disabled={!updateText.trim() || updateLoading}
+                                  className="w-full"
+                                >
+                                  {updateLoading ? 'Sending...' : 'Send Update'}
+                                </Button>
                               </div>
-                            )}
+                            </div>
                           </TabsContent>
 
                           <TabsContent value="updates" className="space-y-4">
                             <div>
-                              <h4 className="font-semibold mb-4">Add Update</h4>
-                              <div className="space-y-2">
-                                <Textarea
-                                  value={newUpdate}
-                                  onChange={(e) => setNewUpdate(e.target.value)}
-                                  placeholder="Add a comment or update..."
-                                  rows="3"
-                                />
-                                <Button 
-                                  onClick={addUpdate} 
-                                  disabled={!newUpdate.trim() || updatingRequest}
-                                  size="sm"
-                                >
-                                  {updatingRequest ? 'Adding...' : 'Add Update'}
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div>
                               <h4 className="font-semibold mb-4">Request Updates</h4>
                               {selectedRequest.updates && selectedRequest.updates.length > 0 ? (
-                                <div className="space-y-3 max-h-64 overflow-y-auto">
+                                <div className="space-y-3 max-h-96 overflow-y-auto">
                                   {selectedRequest.updates.map((update) => (
                                     <div key={update.id} className="border rounded p-3">
                                       <div className="flex justify-between items-start mb-2">
@@ -538,4 +598,4 @@ const MyTransitionRequests = () => {
   );
 };
 
-export default MyTransitionRequests;
+export default AdminTransitionRequests;
