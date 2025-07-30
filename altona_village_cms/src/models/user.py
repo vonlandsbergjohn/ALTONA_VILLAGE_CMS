@@ -323,6 +323,7 @@ class Vehicle(db.Model):
     make = db.Column(db.String(100))
     model = db.Column(db.String(100))
     color = db.Column(db.String(50))
+    status = db.Column(db.String(20), default='active')  # active, inactive
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -338,6 +339,7 @@ class Vehicle(db.Model):
             'make': self.make,
             'model': self.model,
             'color': self.color,
+            'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -520,9 +522,49 @@ class UserTransitionRequest(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     completion_date = db.Column(db.DateTime)
     
+    # Extended new occupant information for user creation
+    new_occupant_first_name = db.Column(db.Text)
+    new_occupant_last_name = db.Column(db.Text)
+    new_occupant_id_number = db.Column(db.Text)
+    create_new_user_account = db.Column(db.Boolean, default=False)
+    transfer_property_ownership = db.Column(db.Boolean, default=False)
+    new_user_temp_password = db.Column(db.Text)
+    
+    # New occupant address information
+    new_occupant_street_number = db.Column(db.Text)
+    new_occupant_street_name = db.Column(db.Text)
+    new_occupant_full_address = db.Column(db.Text)
+    new_occupant_intercom_code = db.Column(db.Text)
+    
+    # Emergency contact
+    new_occupant_emergency_contact_name = db.Column(db.Text)
+    new_occupant_emergency_contact_number = db.Column(db.Text)
+    
+    # Additional move-in details
+    new_occupant_moving_in_date = db.Column(db.Date)
+    
+    # Owner-specific fields
+    new_occupant_title_deed_number = db.Column(db.Text)
+    new_occupant_acquisition_date = db.Column(db.Date)
+    
+    # Postal address
+    new_occupant_postal_street_number = db.Column(db.Text)
+    new_occupant_postal_street_name = db.Column(db.Text)
+    new_occupant_postal_suburb = db.Column(db.Text)
+    new_occupant_postal_city = db.Column(db.Text)
+    new_occupant_postal_code = db.Column(db.Text)
+    new_occupant_postal_province = db.Column(db.Text)
+    new_occupant_full_postal_address = db.Column(db.Text)
+    
+    # Migration tracking fields
+    migration_completed = db.Column(db.Boolean, default=False)
+    migration_date = db.Column(db.DateTime)
+    new_user_id = db.Column(db.String(36), db.ForeignKey('users.id'))
+    
     # Relationships
     user = db.relationship('User', foreign_keys=[user_id], backref='transition_requests')
     admin = db.relationship('User', foreign_keys=[assigned_admin])
+    new_user = db.relationship('User', foreign_keys=[new_user_id])
     updates = db.relationship('TransitionRequestUpdate', backref='transition_request', lazy=True, cascade='all, delete-orphan')
     vehicles = db.relationship('TransitionVehicle', backref='transition_request', lazy=True, cascade='all, delete-orphan')
 
@@ -576,7 +618,32 @@ class UserTransitionRequest(db.Model):
             'admin_notes': self.admin_notes,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'completion_date': self.completion_date.isoformat() if self.completion_date else None
+            'completion_date': self.completion_date.isoformat() if self.completion_date else None,
+            'new_occupant_first_name': self.new_occupant_first_name,
+            'new_occupant_last_name': self.new_occupant_last_name,
+            'new_occupant_id_number': self.new_occupant_id_number,
+            'create_new_user_account': self.create_new_user_account,
+            'transfer_property_ownership': self.transfer_property_ownership,
+            'new_user_temp_password': self.new_user_temp_password,
+            'new_occupant_street_number': self.new_occupant_street_number,
+            'new_occupant_street_name': self.new_occupant_street_name,
+            'new_occupant_full_address': self.new_occupant_full_address,
+            'new_occupant_intercom_code': self.new_occupant_intercom_code,
+            'new_occupant_emergency_contact_name': self.new_occupant_emergency_contact_name,
+            'new_occupant_emergency_contact_number': self.new_occupant_emergency_contact_number,
+            'new_occupant_moving_in_date': self.new_occupant_moving_in_date.isoformat() if self.new_occupant_moving_in_date else None,
+            'new_occupant_title_deed_number': self.new_occupant_title_deed_number,
+            'new_occupant_acquisition_date': self.new_occupant_acquisition_date.isoformat() if self.new_occupant_acquisition_date else None,
+            'new_occupant_postal_street_number': self.new_occupant_postal_street_number,
+            'new_occupant_postal_street_name': self.new_occupant_postal_street_name,
+            'new_occupant_postal_suburb': self.new_occupant_postal_suburb,
+            'new_occupant_postal_city': self.new_occupant_postal_city,
+            'new_occupant_postal_code': self.new_occupant_postal_code,
+            'new_occupant_postal_province': self.new_occupant_postal_province,
+            'new_occupant_full_postal_address': self.new_occupant_full_postal_address,
+            'migration_completed': self.migration_completed,
+            'migration_date': self.migration_date.isoformat() if self.migration_date else None,
+            'new_user_id': self.new_user_id
         }
 
 class TransitionRequestUpdate(db.Model):
@@ -614,6 +681,7 @@ class TransitionVehicle(db.Model):
     vehicle_make = db.Column(db.String(100))
     vehicle_model = db.Column(db.String(100))
     license_plate = db.Column(db.String(50))
+    color = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     def __repr__(self):
@@ -626,6 +694,7 @@ class TransitionVehicle(db.Model):
             'vehicle_make': self.vehicle_make,
             'vehicle_model': self.vehicle_model,
             'license_plate': self.license_plate,
+            'color': self.color,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

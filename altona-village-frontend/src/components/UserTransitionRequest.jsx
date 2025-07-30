@@ -62,6 +62,30 @@ const UserTransitionRequest = () => {
     new_occupant_children: 0,
     new_occupant_pets: 0,
     
+    // Address information (required for database migration)
+    new_occupant_street_number: '',
+    new_occupant_street_name: '',
+    new_occupant_full_address: '',
+    new_occupant_intercom_code: '',
+    new_occupant_moving_in_date: null,
+    
+    // Emergency contacts (required)
+    new_occupant_emergency_contact_name: '',
+    new_occupant_emergency_contact_number: '',
+    
+    // Owner-specific fields
+    new_occupant_title_deed_number: '',
+    new_occupant_acquisition_date: null,
+    
+    // Postal address (for non-resident owners)
+    new_occupant_postal_street_number: '',
+    new_occupant_postal_street_name: '',
+    new_occupant_postal_suburb: '',
+    new_occupant_postal_city: '',
+    new_occupant_postal_code: '',
+    new_occupant_postal_province: '',
+    new_occupant_full_postal_address: '',
+    
     // Special instructions
     access_handover_requirements: '',
     property_condition_notes: '',
@@ -124,7 +148,7 @@ const UserTransitionRequest = () => {
   const addVehicle = () => {
     setFormData(prev => ({
       ...prev,
-      vehicles: [...prev.vehicles, { vehicle_make: '', vehicle_model: '', license_plate: '' }]
+      vehicles: [...prev.vehicles, { vehicle_make: '', vehicle_model: '', license_plate: '', color: '' }]
     }));
   };
 
@@ -555,7 +579,7 @@ const UserTransitionRequest = () => {
                     </Button>
                   </div>
                   
-                  <div className="grid md:grid-cols-3 gap-4">
+                  <div className="grid md:grid-cols-4 gap-4">
                     <div>
                       <Label htmlFor={`vehicle_make_${index}`}>Make</Label>
                       <Input
@@ -580,6 +604,16 @@ const UserTransitionRequest = () => {
                         id={`license_plate_${index}`}
                         value={vehicle.license_plate}
                         onChange={(e) => updateVehicle(index, 'license_plate', e.target.value)}
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor={`vehicle_color_${index}`}>Color</Label>
+                      <Input
+                        id={`vehicle_color_${index}`}
+                        value={vehicle.color || ''}
+                        onChange={(e) => updateVehicle(index, 'color', e.target.value)}
+                        placeholder="Vehicle color"
                       />
                     </div>
                   </div>
@@ -658,7 +692,206 @@ const UserTransitionRequest = () => {
                         value={formData.new_occupant_id_number}
                         onChange={(e) => handleInputChange('new_occupant_id_number', e.target.value)}
                         placeholder="For user account creation"
+                        required
                       />
+                    </div>
+                  </div>
+                )}
+
+                {/* Address Information Section */}
+                {formData.new_occupant_type !== 'unknown' && (
+                  <div className="space-y-4">
+                    <h4 className="text-lg font-semibold">New Occupant Address</h4>
+                    <div className="grid md:grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="new_occupant_street_number">Street Number</Label>
+                        <Input
+                          id="new_occupant_street_number"
+                          value={formData.new_occupant_street_number}
+                          onChange={(e) => handleInputChange('new_occupant_street_number', e.target.value)}
+                          placeholder="e.g., 123"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="new_occupant_street_name">Street Name</Label>
+                        <Input
+                          id="new_occupant_street_name"
+                          value={formData.new_occupant_street_name}
+                          onChange={(e) => handleInputChange('new_occupant_street_name', e.target.value)}
+                          placeholder="e.g., Main Street"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="new_occupant_intercom_code">Intercom Code</Label>
+                        <Input
+                          id="new_occupant_intercom_code"
+                          value={formData.new_occupant_intercom_code}
+                          onChange={(e) => handleInputChange('new_occupant_intercom_code', e.target.value)}
+                          placeholder="Optional"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="new_occupant_full_address">Full Address</Label>
+                        <Input
+                          id="new_occupant_full_address"
+                          value={formData.new_occupant_full_address}
+                          onChange={(e) => handleInputChange('new_occupant_full_address', e.target.value)}
+                          placeholder="Complete address for display"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="new_occupant_moving_in_date">Moving In Date</Label>
+                        <Input
+                          id="new_occupant_moving_in_date"
+                          type="date"
+                          value={formData.new_occupant_moving_in_date}
+                          onChange={(e) => handleInputChange('new_occupant_moving_in_date', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Emergency Contacts Section */}
+                {formData.new_occupant_type !== 'unknown' && (
+                  <div className="space-y-4">
+                    <h4 className="text-lg font-semibold">Emergency Contact Information</h4>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="new_occupant_emergency_contact_name">Emergency Contact Name</Label>
+                        <Input
+                          id="new_occupant_emergency_contact_name"
+                          value={formData.new_occupant_emergency_contact_name}
+                          onChange={(e) => handleInputChange('new_occupant_emergency_contact_name', e.target.value)}
+                          placeholder="Full name of emergency contact"
+                          required
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="new_occupant_emergency_contact_number">Emergency Contact Phone</Label>
+                        <Input
+                          id="new_occupant_emergency_contact_number"
+                          value={formData.new_occupant_emergency_contact_number}
+                          onChange={(e) => handleInputChange('new_occupant_emergency_contact_number', e.target.value)}
+                          placeholder="Emergency contact phone number"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Owner-Specific Fields */}
+                {formData.new_occupant_type === 'new_owner' && (
+                  <div className="space-y-4">
+                    <h4 className="text-lg font-semibold">Owner-Specific Information</h4>
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="new_occupant_title_deed_number">Title Deed Number</Label>
+                        <Input
+                          id="new_occupant_title_deed_number"
+                          value={formData.new_occupant_title_deed_number}
+                          onChange={(e) => handleInputChange('new_occupant_title_deed_number', e.target.value)}
+                          placeholder="Property title deed number"
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="new_occupant_acquisition_date">Acquisition Date</Label>
+                        <Input
+                          id="new_occupant_acquisition_date"
+                          type="date"
+                          value={formData.new_occupant_acquisition_date}
+                          onChange={(e) => handleInputChange('new_occupant_acquisition_date', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <h5 className="font-medium">Postal Address (if different from property address)</h5>
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="new_occupant_postal_street_number">Postal Street Number</Label>
+                          <Input
+                            id="new_occupant_postal_street_number"
+                            value={formData.new_occupant_postal_street_number}
+                            onChange={(e) => handleInputChange('new_occupant_postal_street_number', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="new_occupant_postal_street_name">Postal Street Name</Label>
+                          <Input
+                            id="new_occupant_postal_street_name"
+                            value={formData.new_occupant_postal_street_name}
+                            onChange={(e) => handleInputChange('new_occupant_postal_street_name', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="new_occupant_postal_suburb">Suburb</Label>
+                          <Input
+                            id="new_occupant_postal_suburb"
+                            value={formData.new_occupant_postal_suburb}
+                            onChange={(e) => handleInputChange('new_occupant_postal_suburb', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="new_occupant_postal_city">City</Label>
+                          <Input
+                            id="new_occupant_postal_city"
+                            value={formData.new_occupant_postal_city}
+                            onChange={(e) => handleInputChange('new_occupant_postal_city', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="new_occupant_postal_code">Postal Code</Label>
+                          <Input
+                            id="new_occupant_postal_code"
+                            value={formData.new_occupant_postal_code}
+                            onChange={(e) => handleInputChange('new_occupant_postal_code', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="new_occupant_postal_province">Province</Label>
+                          <Input
+                            id="new_occupant_postal_province"
+                            value={formData.new_occupant_postal_province}
+                            onChange={(e) => handleInputChange('new_occupant_postal_province', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="new_occupant_full_postal_address">Complete Postal Address</Label>
+                        <Input
+                          id="new_occupant_full_postal_address"
+                          value={formData.new_occupant_full_postal_address}
+                          onChange={(e) => handleInputChange('new_occupant_full_postal_address', e.target.value)}
+                          placeholder="Full postal address if different from property"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}

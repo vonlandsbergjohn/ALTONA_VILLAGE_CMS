@@ -6,11 +6,198 @@ Following the same pattern as the complaint system
 
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models.user import db, User, Resident, Owner, UserTransitionRequest, TransitionRequestUpdate, TransitionVehicle
+from ..models.user import db, User, Resident, Owner, UserTransitionRequest, TransitionRequestUpdate, TransitionVehicle, Vehicle
 from datetime import datetime, date
 import uuid
 
 transition_bp = Blueprint('transition', __name__)
+
+def perform_user_migration(transition_request):
+    """
+    Migrate user from transition request to production database when status becomes 'completed'
+    This handles:
+    1. Moving old user to inactive status
+    2. Creating new user records in production database
+    3. Updating Gate Register with new user data
+    4. Preserving audit trail
+    """
+    try:
+        # Only process if we have new occupant information
+        if (not transition_request.new_occupant_type or 
+            transition_request.new_occupant_type == 'unknown' or
+            not transition_request.new_occupant_first_name or
+            not transition_request.new_occupant_last_name):
+            return {'success': True, 'message': 'No new occupant data to migrate'}
+        
+        # Find the current user (old occupant)
+        current_user = User.query.get(transition_request.user_id)
+        if not current_user:
+            return {'success': False, 'error': 'Current user not found'}
+        
+        # Step 1: Mark old user as inactive
+        current_user.status = 'inactive'
+        
+        # Step 2: Create new user account
+        new_user_email = transition_request.new_occupant_email
+        if not new_user_email:
+            # Generate a temporary email if none provided
+            new_user_email = f"temp_{transition_request.new_occupant_first_name.lower()}_{transition_request.new_occupant_last_name.lower()}@altona-village.temp"
+        
+        # Check if user with this email already exists
+        existing_user = User.query.filter_by(email=new_user_email).first()
+        if existing_user:
+            return {'success': False, 'error': f'User with email {new_user_email} already exists'}
+        
+        # Create new user
+        new_user = User(
+            email=new_user_email,
+            password_hash=current_user.password_hash,  # Temporary - user will need to reset
+            full_name=f"{transition_request.new_occupant_first_name} {transition_request.new_occupant_last_name}",
+            role='resident',  # Default role, will be adjusted based on occupant type
+            status='active'
+        )
+        db.session.add(new_user)
+        db.session.flush()  # Get new_user.id
+        
+        # Step 3: Create appropriate records based on new occupant type
+        if transition_request.new_occupant_type == 'new_tenant':
+            # Create resident record
+            resident = Resident(
+                user_id=new_user.id,
+                first_name=transition_request.new_occupant_first_name,
+                last_name=transition_request.new_occupant_last_name,
+                phone_number=transition_request.new_occupant_phone or '',
+                emergency_contact_name=transition_request.new_occupant_emergency_contact_name or '',
+                emergency_contact_number=transition_request.new_occupant_emergency_contact_number or '',
+                id_number=transition_request.new_occupant_id_number or '',
+                erf_number=transition_request.erf_number,
+                street_number=transition_request.new_occupant_street_number or '',
+                street_name=transition_request.new_occupant_street_name or '',
+                full_address=transition_request.new_occupant_full_address or '',
+                intercom_code=transition_request.new_occupant_intercom_code or '',
+                moving_in_date=transition_request.new_occupant_moving_in_date
+            )
+            db.session.add(resident)
+            
+        elif transition_request.new_occupant_type == 'new_owner':
+            # Create owner record
+            owner = Owner(
+                user_id=new_user.id,
+                first_name=transition_request.new_occupant_first_name,
+                last_name=transition_request.new_occupant_last_name,
+                phone_number=transition_request.new_occupant_phone or '',
+                emergency_contact_name=transition_request.new_occupant_emergency_contact_name or '',
+                emergency_contact_number=transition_request.new_occupant_emergency_contact_number or '',
+                id_number=transition_request.new_occupant_id_number or '',
+                erf_number=transition_request.erf_number,
+                street_number=transition_request.new_occupant_street_number or '',
+                street_name=transition_request.new_occupant_street_name or '',
+                full_address=transition_request.new_occupant_full_address or '',
+                intercom_code=transition_request.new_occupant_intercom_code or '',
+                title_deed_number=transition_request.new_occupant_title_deed_number or '',
+                acquisition_date=transition_request.new_occupant_acquisition_date,
+                postal_street_number=transition_request.new_occupant_postal_street_number or '',
+                postal_street_name=transition_request.new_occupant_postal_street_name or '',
+                postal_suburb=transition_request.new_occupant_postal_suburb or '',
+                postal_city=transition_request.new_occupant_postal_city or '',
+                postal_code=transition_request.new_occupant_postal_code or '',
+                postal_province=transition_request.new_occupant_postal_province or '',
+                full_postal_address=transition_request.new_occupant_full_postal_address or ''
+            )
+            db.session.add(owner)
+            
+        elif transition_request.new_occupant_type == 'owner_resident':
+            # Create both resident and owner records
+            resident = Resident(
+                user_id=new_user.id,
+                first_name=transition_request.new_occupant_first_name,
+                last_name=transition_request.new_occupant_last_name,
+                phone_number=transition_request.new_occupant_phone or '',
+                emergency_contact_name=transition_request.new_occupant_emergency_contact_name or '',
+                emergency_contact_number=transition_request.new_occupant_emergency_contact_number or '',
+                id_number=transition_request.new_occupant_id_number or '',
+                erf_number=transition_request.erf_number,
+                street_number=transition_request.new_occupant_street_number or '',
+                street_name=transition_request.new_occupant_street_name or '',
+                full_address=transition_request.new_occupant_full_address or '',
+                intercom_code=transition_request.new_occupant_intercom_code or '',
+                moving_in_date=transition_request.new_occupant_moving_in_date
+            )
+            db.session.add(resident)
+            
+            owner = Owner(
+                user_id=new_user.id,
+                first_name=transition_request.new_occupant_first_name,
+                last_name=transition_request.new_occupant_last_name,
+                phone_number=transition_request.new_occupant_phone or '',
+                emergency_contact_name=transition_request.new_occupant_emergency_contact_name or '',
+                emergency_contact_number=transition_request.new_occupant_emergency_contact_number or '',
+                id_number=transition_request.new_occupant_id_number or '',
+                erf_number=transition_request.erf_number,
+                street_number=transition_request.new_occupant_street_number or '',
+                street_name=transition_request.new_occupant_street_name or '',
+                full_address=transition_request.new_occupant_full_address or '',
+                intercom_code=transition_request.new_occupant_intercom_code or '',
+                title_deed_number=transition_request.new_occupant_title_deed_number or '',
+                acquisition_date=transition_request.new_occupant_acquisition_date,
+                postal_street_number=transition_request.new_occupant_postal_street_number or '',
+                postal_street_name=transition_request.new_occupant_postal_street_name or '',
+                postal_suburb=transition_request.new_occupant_postal_suburb or '',
+                postal_city=transition_request.new_occupant_postal_city or '',
+                postal_code=transition_request.new_occupant_postal_code or '',
+                postal_province=transition_request.new_occupant_postal_province or '',
+                full_postal_address=transition_request.new_occupant_full_postal_address or ''
+            )
+            db.session.add(owner)
+        
+        # Step 4: Migrate vehicles if requested
+        if transition_request.vehicle_registration_transfer:
+            # Get transition vehicles for this request
+            transition_vehicles = TransitionVehicle.query.filter_by(
+                transition_request_id=transition_request.id
+            ).all()
+            
+            for trans_vehicle in transition_vehicles:
+                # Create new vehicle record for the new user
+                new_vehicle = Vehicle(
+                    resident_id=resident.id if 'resident' in locals() else None,
+                    owner_id=owner.id if 'owner' in locals() and 'resident' not in locals() else None,
+                    registration_number=trans_vehicle.license_plate,
+                    make=trans_vehicle.vehicle_make,
+                    model=trans_vehicle.vehicle_model,
+                    color=getattr(trans_vehicle, 'color', None)  # Handle missing color field
+                )
+                db.session.add(new_vehicle)
+        
+        # Step 5: Transfer old user vehicles to inactive (don't delete, preserve audit trail)
+        if current_user.resident:
+            old_vehicles = Vehicle.query.filter_by(resident_id=current_user.resident.id).all()
+            for vehicle in old_vehicles:
+                vehicle.status = 'inactive'  # Assume we add status field to Vehicle model
+        
+        if current_user.owner:
+            old_vehicles = Vehicle.query.filter_by(owner_id=current_user.owner.id).all()
+            for vehicle in old_vehicles:
+                vehicle.status = 'inactive'
+        
+        # Step 6: Record migration in transition request
+        transition_request.migration_completed = True
+        transition_request.migration_date = datetime.utcnow()
+        transition_request.new_user_id = new_user.id
+        
+        # Commit all changes
+        db.session.commit()
+        
+        return {
+            'success': True, 
+            'message': f'User migration completed successfully. New user created: {new_user.email}',
+            'new_user_id': new_user.id,
+            'old_user_id': current_user.id
+        }
+        
+    except Exception as e:
+        db.session.rollback()
+        return {'success': False, 'error': f'Migration failed: {str(e)}'}
 
 @transition_bp.route('/request', methods=['POST'])
 @jwt_required()
@@ -399,6 +586,11 @@ def update_transition_request_status(request_id):
         # Set completion date if completed
         if new_status == 'completed':
             transition_request.completion_date = datetime.utcnow()
+            # Perform user migration from transition data to production database
+            migration_result = perform_user_migration(transition_request)
+            if not migration_result['success']:
+                current_app.logger.error(f"User migration failed: {migration_result['error']}")
+                # Don't fail the status update, but log the error
         
         # Create status update record
         update = TransitionRequestUpdate(
@@ -457,6 +649,11 @@ def add_admin_update_to_request(request_id):
             # Set completion date if status is completed
             if new_status == 'completed':
                 transition_request.completion_date = datetime.utcnow()
+                # Perform user migration from transition data to production database
+                migration_result = perform_user_migration(transition_request)
+                if not migration_result['success']:
+                    current_app.logger.error(f"User migration failed: {migration_result['error']}")
+                    # Don't fail the status update, but log the error
         
         # Create the update
         update = TransitionRequestUpdate(
