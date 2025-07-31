@@ -9,6 +9,7 @@ import AdminComplaints from '@/components/AdminComplaints';
 import AdminResidents from '@/components/AdminResidents';
 import AdminNotificationsDashboard from '@/components/AdminNotificationsDashboard';
 import AdminTransitionRequests from '@/components/AdminTransitionRequests';
+import AdminTransitionLinking from '@/components/AdminTransitionLinking';
 import GateRegister from '@/components/GateRegister';
 import PendingRegistrations from './components/PendingRegistrations';
 import ResidentDashboard from '@/components/ResidentDashboard';
@@ -102,6 +103,8 @@ const Router = () => {
           return <AdminComplaints />;
         case '/admin/transition-requests':
           return <AdminTransitionRequests />;
+        case '/admin/transition-linking':
+          return <AdminTransitionLinking />;
         case '/admin/pending':
           return <PendingRegistrations />;
         case '/admin/notifications':

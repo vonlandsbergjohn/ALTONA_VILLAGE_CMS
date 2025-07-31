@@ -96,6 +96,12 @@ class Resident(db.Model):
     
     moving_in_date = db.Column(db.Date)
     moving_out_date = db.Column(db.Date)
+    
+    # Status and migration tracking
+    status = db.Column(db.String(50), nullable=False, default='active')  # active, inactive, deleted_profile
+    migration_date = db.Column(db.DateTime)  # When this record was migrated/deleted
+    migration_reason = db.Column(db.Text)  # Why this record was migrated/deleted
+    
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -177,6 +183,12 @@ class Owner(db.Model):
     
     emergency_contact_name = db.Column(db.String(255))
     emergency_contact_number = db.Column(db.String(20))
+    
+    # Status and migration tracking
+    status = db.Column(db.String(50), nullable=False, default='active')  # active, inactive, deleted_profile
+    migration_date = db.Column(db.DateTime)  # When this record was migrated/deleted
+    migration_reason = db.Column(db.Text)  # Why this record was migrated/deleted
+    
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -324,6 +336,11 @@ class Vehicle(db.Model):
     model = db.Column(db.String(100))
     color = db.Column(db.String(50))
     status = db.Column(db.String(20), default='active')  # active, inactive
+    
+    # Migration tracking
+    migration_date = db.Column(db.DateTime)  # When this vehicle was migrated/deactivated
+    migration_reason = db.Column(db.Text)  # Why this vehicle was migrated/deactivated
+    
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -572,9 +589,28 @@ class UserTransitionRequest(db.Model):
         return f'<UserTransitionRequest {self.request_type} - ERF {self.erf_number}>'
 
     def to_dict(self):
+        # Get user information
+        user = User.query.get(self.user_id) if self.user_id else None
+        
+        # Extract first and last names from user's resident or owner record
+        user_first_name = None
+        user_last_name = None
+        if user:
+            if user.resident:
+                user_first_name = user.resident.first_name
+                user_last_name = user.resident.last_name
+            elif user.owner:
+                user_first_name = user.owner.first_name
+                user_last_name = user.owner.last_name
+        
         return {
             'id': self.id,
             'user_id': self.user_id,
+            'user_email': user.email if user else None,
+            'user_first_name': user_first_name,
+            'user_last_name': user_last_name,
+            'current_user_first_name': user_first_name,  # For transition linking compatibility
+            'current_user_last_name': user_last_name,    # For transition linking compatibility
             'erf_number': self.erf_number,
             'request_type': self.request_type,
             'current_role': self.current_role,

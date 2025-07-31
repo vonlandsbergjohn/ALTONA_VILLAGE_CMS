@@ -10,6 +10,7 @@ import { Calendar } from './ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { CalendarIcon, PlusIcon, TrashIcon } from 'lucide-react';
 import { format } from 'date-fns';
+import { authAPI, residentAPI } from '@/lib/api.js';
 
 const UserTransitionRequest = () => {
   const [formData, setFormData] = useState({
@@ -91,7 +92,7 @@ const UserTransitionRequest = () => {
     property_condition_notes: '',
     community_introduction_needs: '',
     
-    // Vehicles
+    // Current user vehicles (auto-populated)
     vehicles: []
   });
 
@@ -106,28 +107,73 @@ const UserTransitionRequest = () => {
 
   const fetchUserInfo = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/users/profile', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUserInfo(data);
-        
-        // Pre-fill ERF number if available
-        if (data.resident?.erf_number || data.owner?.erf_number) {
-          setFormData(prev => ({
-            ...prev,
-            erf_number: data.resident?.erf_number || data.owner?.erf_number
-          }));
-        }
+      console.log('Fetching user profile...');
+      const response = await authAPI.getProfile();
+      console.log('Profile response:', response);
+      const data = response.data;
+      console.log('Profile data:', data);
+      setUserInfo(data);
+      
+      // Determine user role and populate form with existing data
+      const isResident = data.resident;
+      const isOwner = data.owner;
+      console.log('User roles - isResident:', isResident, 'isOwner:', isOwner);
+      
+      let currentRole = '';
+      
+      if (isResident && isOwner) {
+        currentRole = 'owner_resident';
+      } else if (isOwner) {
+        currentRole = 'owner';
+      } else if (isResident) {
+        currentRole = 'tenant';
       }
+
+      // Pre-populate form with existing user data
+      const profileData = isResident || isOwner;
+      console.log('Profile data to use:', profileData);
+      
+      if (profileData) {
+        console.log('Setting ERF number:', profileData.erf_number);
+        setFormData(prev => ({
+          ...prev,
+          // Basic information
+          erf_number: profileData.erf_number || '',
+          current_role: currentRole,
+          
+          // These fields remain empty for user to fill in transition-specific info
+          // but we now have their existing data available for reference
+        }));
+      }
+
+      // Also fetch and pre-populate vehicle information
+      fetchUserVehicles();
     } catch (error) {
       console.error('Error fetching user info:', error);
+    }
+  };
+
+  const fetchUserVehicles = async () => {
+    try {
+      const response = await residentAPI.getMyVehicles();
+      const vehicles = response.data;
+      
+      if (vehicles && vehicles.length > 0) {
+        // Pre-populate vehicles for easy reference/transfer
+        const vehicleData = vehicles.map(vehicle => ({
+          vehicle_make: vehicle.make || '',
+          vehicle_model: vehicle.model || '',
+          license_plate: vehicle.registration_number || '',
+          color: vehicle.color || ''
+        }));
+
+        setFormData(prev => ({
+          ...prev,
+          vehicles: vehicleData
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching user vehicles:', error);
     }
   };
 
@@ -176,7 +222,7 @@ const UserTransitionRequest = () => {
     try {
       const token = localStorage.getItem('token');
       
-      // Format dates for submission
+      // Format dates for submission and exclude new occupant fields for privacy compliance
       const submitData = {
         ...formData,
         intended_moveout_date: formData.intended_moveout_date ? format(formData.intended_moveout_date, 'yyyy-MM-dd') : null,
@@ -185,10 +231,13 @@ const UserTransitionRequest = () => {
         expected_transfer_date: formData.expected_transfer_date ? format(formData.expected_transfer_date, 'yyyy-MM-dd') : null,
         lease_end_date: formData.lease_end_date ? format(formData.lease_end_date, 'yyyy-MM-dd') : null,
         rental_start_date: formData.rental_start_date ? format(formData.rental_start_date, 'yyyy-MM-dd') : null,
-        // Clean up integer fields - convert empty strings to null
-        new_occupant_adults: formData.new_occupant_adults === '' ? null : parseInt(formData.new_occupant_adults) || 0,
-        new_occupant_children: formData.new_occupant_children === '' ? null : parseInt(formData.new_occupant_children) || 0,
-        new_occupant_pets: formData.new_occupant_pets === '' ? null : parseInt(formData.new_occupant_pets) || 0,
+        
+        // Explicitly exclude new occupant personal data for privacy compliance
+        new_occupant_first_name: undefined,
+        new_occupant_last_name: undefined,
+        new_occupant_phone: undefined,
+        new_occupant_email: undefined,
+        new_occupant_id_number: undefined,
       };
 
       const response = await fetch('/api/transition/request', {
@@ -259,9 +308,90 @@ const UserTransitionRequest = () => {
         <CardHeader>
           <CardTitle>Property Transition Request</CardTitle>
           <CardDescription>
-            Submit a request for property sale, move-out, or tenant change. Please provide as much detail as possible to help us process your request efficiently.
+            Submit a request for property sale, move-out, or tenant change. You only need to provide your own information - the new occupant will register separately.
           </CardDescription>
         </CardHeader>
+
+        {/* Important Information Banner */}
+        <CardContent className="border-b bg-blue-50">
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold text-blue-700">📋 How the Transition Process Works</h3>
+            <div className="grid md:grid-cols-3 gap-4 text-sm">
+              <div className="flex items-start space-x-2">
+                <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">1</span>
+                <div>
+                  <p className="font-medium text-blue-800">You Submit Request</p>
+                  <p className="text-blue-600">Provide your transition details and timeline</p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-2">
+                <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">2</span>
+                <div>
+                  <p className="font-medium text-blue-800">New Occupant Registers</p>
+                  <p className="text-blue-600">They register independently with your ERF number</p>
+                </div>
+              </div>
+              <div className="flex items-start space-x-2">
+                <span className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">3</span>
+                <div>
+                  <p className="font-medium text-blue-800">Admin Links & Completes</p>
+                  <p className="text-blue-600">Admin matches the requests and processes the transition</p>
+                </div>
+              </div>
+            </div>
+            <div className="bg-blue-100 border-l-4 border-blue-500 p-3 rounded">
+              <p className="text-sm text-blue-700">
+                <strong>Privacy Protected:</strong> You don't need to provide the new occupant's personal information. 
+                They will register themselves, ensuring their privacy and data accuracy.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+
+        {/* Current User Information Display */}
+        {userInfo && (
+          <CardContent className="border-b">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-blue-600">Your Current Information</h3>
+              <p className="text-sm text-gray-600">The information below is pre-populated from your profile. You only need to complete the transition-specific details.</p>
+              
+              <div className="grid md:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
+                {(userInfo.resident || userInfo.owner) && (
+                  <>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Current Name</Label>
+                      <p className="text-sm">{userInfo.resident?.first_name || userInfo.owner?.first_name} {userInfo.resident?.last_name || userInfo.owner?.last_name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Current ERF</Label>
+                      <p className="text-sm">{userInfo.resident?.erf_number || userInfo.owner?.erf_number}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Current Address</Label>
+                      <p className="text-sm">{userInfo.resident?.full_address || userInfo.owner?.full_address}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Phone Number</Label>
+                      <p className="text-sm">{userInfo.resident?.phone_number || userInfo.owner?.phone_number}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Intercom Code</Label>
+                      <p className="text-sm">{userInfo.resident?.intercom_code || userInfo.owner?.intercom_code}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-700">Role Type</Label>
+                      <p className="text-sm">
+                        {userInfo.resident && userInfo.owner ? 'Owner-Resident' : 
+                         userInfo.owner ? 'Property Owner' : 'Tenant'}
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        )}
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -273,6 +403,7 @@ const UserTransitionRequest = () => {
             {/* Basic Information */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold">Basic Information</h3>
+              <p className="text-sm text-gray-600">This information is automatically populated from your profile to prevent errors.</p>
               
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
@@ -280,9 +411,12 @@ const UserTransitionRequest = () => {
                   <Input
                     id="erf_number"
                     value={formData.erf_number}
-                    onChange={(e) => handleInputChange('erf_number', e.target.value)}
-                    required
+                    readOnly
+                    disabled
+                    className="bg-gray-100 text-gray-600"
+                    title="This field is auto-populated from your profile"
                   />
+                  <p className="text-xs text-gray-500 mt-1">📍 Auto-filled from your profile</p>
                 </div>
                 
                 <div>
@@ -303,16 +437,20 @@ const UserTransitionRequest = () => {
 
               <div>
                 <Label htmlFor="current_role">Current Role *</Label>
-                <Select value={formData.current_role} onValueChange={(value) => handleInputChange('current_role', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your current role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="owner">Property Owner</SelectItem>
-                    <SelectItem value="tenant">Tenant</SelectItem>
-                    <SelectItem value="owner_resident">Owner-Resident</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Input
+                    id="current_role"
+                    value={formData.current_role === 'owner' ? 'Property Owner' : 
+                           formData.current_role === 'tenant' ? 'Tenant' : 
+                           formData.current_role === 'owner_resident' ? 'Owner-Resident' : 
+                           formData.current_role}
+                    readOnly
+                    disabled
+                    className="bg-gray-100 text-gray-600"
+                    title="This field is auto-populated from your profile"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">👤 Auto-filled from your profile</p>
+                </div>
               </div>
             </div>
 
@@ -353,13 +491,32 @@ const UserTransitionRequest = () => {
                   </div>
                   
                   <div>
-                    <Label>New Occupant Move-In Date</Label>
+                    <Label>New Occupant Move-In Date (if known)</Label>
                     <DatePicker
                       value={formData.new_occupant_movein_date}
                       onChange={(date) => handleDateChange('new_occupant_movein_date', date)}
                       placeholder="Select move-in date"
                     />
                   </div>
+                </div>
+              )}
+
+              {/* Expected New Occupant Type - for admin reference only */}
+              {(formData.request_type === 'owner_sale' || formData.request_type === 'owner_moving') && (
+                <div>
+                  <Label htmlFor="new_occupant_type">Expected New Occupant Type</Label>
+                  <Select value={formData.new_occupant_type} onValueChange={(value) => handleInputChange('new_occupant_type', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select expected type (for admin reference)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new_owner">New Owner (purchase/inheritance)</SelectItem>
+                      <SelectItem value="new_tenant">New Tenant (rental)</SelectItem>
+                      <SelectItem value="owner_resident">Owner moving in</SelectItem>
+                      <SelectItem value="unknown">Unknown at this time</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">This helps admin prepare for the type of transition. The new occupant will provide their own details during registration.</p>
                 </div>
               )}
             </div>
@@ -555,391 +712,57 @@ const UserTransitionRequest = () => {
               </div>
             </div>
 
-            {/* Vehicle Information */}
+            {/* Current User Vehicle Information */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Vehicle Information</h3>
-                <Button type="button" onClick={addVehicle} variant="outline" size="sm">
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Add Vehicle
-                </Button>
+                <div>
+                  <h3 className="text-lg font-semibold">Your Current Vehicles</h3>
+                  <p className="text-sm text-gray-600">These vehicles are registered under your name and will be transferred during the transition</p>
+                </div>
               </div>
               
-              {formData.vehicles.map((vehicle, index) => (
-                <div key={index} className="border p-4 rounded-md space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h4 className="font-medium">Vehicle {index + 1}</h4>
-                    <Button
-                      type="button"
-                      onClick={() => removeVehicle(index)}
-                      variant="outline"
-                      size="sm"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  <div className="grid md:grid-cols-4 gap-4">
-                    <div>
-                      <Label htmlFor={`vehicle_make_${index}`}>Make</Label>
-                      <Input
-                        id={`vehicle_make_${index}`}
-                        value={vehicle.vehicle_make}
-                        onChange={(e) => updateVehicle(index, 'vehicle_make', e.target.value)}
-                      />
+              {formData.vehicles.length > 0 ? (
+                <div className="space-y-3">
+                  {formData.vehicles.map((vehicle, index) => (
+                    <div key={index} className="border border-blue-200 bg-blue-50 p-4 rounded-md">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-medium text-blue-800">Vehicle {index + 1}</h4>
+                        <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">From your profile</span>
+                      </div>
+                      
+                      <div className="grid md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <Label className="text-xs text-gray-600">Make</Label>
+                          <p className="font-medium">{vehicle.vehicle_make || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-600">Model</Label>
+                          <p className="font-medium">{vehicle.vehicle_model || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-600">License Plate</Label>
+                          <p className="font-medium">{vehicle.license_plate || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-gray-600">Color</Label>
+                          <p className="font-medium">{vehicle.color || 'Not specified'}</p>
+                        </div>
+                      </div>
                     </div>
-                    
-                    <div>
-                      <Label htmlFor={`vehicle_model_${index}`}>Model</Label>
-                      <Input
-                        id={`vehicle_model_${index}`}
-                        value={vehicle.vehicle_model}
-                        onChange={(e) => updateVehicle(index, 'vehicle_model', e.target.value)}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor={`license_plate_${index}`}>License Plate</Label>
-                      <Input
-                        id={`license_plate_${index}`}
-                        value={vehicle.license_plate}
-                        onChange={(e) => updateVehicle(index, 'license_plate', e.target.value)}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor={`vehicle_color_${index}`}>Color</Label>
-                      <Input
-                        id={`vehicle_color_${index}`}
-                        value={vehicle.color || ''}
-                        onChange={(e) => updateVehicle(index, 'color', e.target.value)}
-                        placeholder="Vehicle color"
-                      />
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <div className="text-center py-6 text-gray-500">
+                  <p>No vehicles found in your profile</p>
+                  <p className="text-sm">You can add vehicles in your Profile Management section</p>
+                </div>
+              )}
             </div>
-
-            {/* New Occupant Information */}
-            {(formData.request_type === 'owner_sale' || formData.request_type === 'owner_moving') && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">New Occupant Information (if known)</h3>
-                
-                <div>
-                  <Label htmlFor="new_occupant_type">New Occupant Type</Label>
-                  <Select value={formData.new_occupant_type} onValueChange={(value) => handleInputChange('new_occupant_type', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="new_owner">New Owner (purchase)</SelectItem>
-                      <SelectItem value="new_tenant">New Tenant (rental)</SelectItem>
-                      <SelectItem value="unknown">Unknown at this time</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {formData.new_occupant_type !== 'unknown' && (
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="new_occupant_first_name">First Name</Label>
-                      <Input
-                        id="new_occupant_first_name"
-                        value={formData.new_occupant_first_name}
-                        onChange={(e) => handleInputChange('new_occupant_first_name', e.target.value)}
-                        required
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="new_occupant_last_name">Last Name</Label>
-                      <Input
-                        id="new_occupant_last_name"
-                        value={formData.new_occupant_last_name}
-                        onChange={(e) => handleInputChange('new_occupant_last_name', e.target.value)}
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
-                
-                {formData.new_occupant_type !== 'unknown' && (
-                  <div className="grid md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="new_occupant_phone">Phone Number</Label>
-                      <Input
-                        id="new_occupant_phone"
-                        value={formData.new_occupant_phone}
-                        onChange={(e) => handleInputChange('new_occupant_phone', e.target.value)}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="new_occupant_email">Email Address</Label>
-                      <Input
-                        id="new_occupant_email"
-                        type="email"
-                        value={formData.new_occupant_email}
-                        onChange={(e) => handleInputChange('new_occupant_email', e.target.value)}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="new_occupant_id_number">ID Number</Label>
-                      <Input
-                        id="new_occupant_id_number"
-                        value={formData.new_occupant_id_number}
-                        onChange={(e) => handleInputChange('new_occupant_id_number', e.target.value)}
-                        placeholder="For user account creation"
-                        required
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Address Information Section */}
-                {formData.new_occupant_type !== 'unknown' && (
-                  <div className="space-y-4">
-                    <h4 className="text-lg font-semibold">New Occupant Address</h4>
-                    <div className="grid md:grid-cols-3 gap-4">
-                      <div>
-                        <Label htmlFor="new_occupant_street_number">Street Number</Label>
-                        <Input
-                          id="new_occupant_street_number"
-                          value={formData.new_occupant_street_number}
-                          onChange={(e) => handleInputChange('new_occupant_street_number', e.target.value)}
-                          placeholder="e.g., 123"
-                          required
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_street_name">Street Name</Label>
-                        <Input
-                          id="new_occupant_street_name"
-                          value={formData.new_occupant_street_name}
-                          onChange={(e) => handleInputChange('new_occupant_street_name', e.target.value)}
-                          placeholder="e.g., Main Street"
-                          required
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_intercom_code">Intercom Code</Label>
-                        <Input
-                          id="new_occupant_intercom_code"
-                          value={formData.new_occupant_intercom_code}
-                          onChange={(e) => handleInputChange('new_occupant_intercom_code', e.target.value)}
-                          placeholder="Optional"
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="new_occupant_full_address">Full Address</Label>
-                        <Input
-                          id="new_occupant_full_address"
-                          value={formData.new_occupant_full_address}
-                          onChange={(e) => handleInputChange('new_occupant_full_address', e.target.value)}
-                          placeholder="Complete address for display"
-                          required
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_moving_in_date">Moving In Date</Label>
-                        <Input
-                          id="new_occupant_moving_in_date"
-                          type="date"
-                          value={formData.new_occupant_moving_in_date}
-                          onChange={(e) => handleInputChange('new_occupant_moving_in_date', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Emergency Contacts Section */}
-                {formData.new_occupant_type !== 'unknown' && (
-                  <div className="space-y-4">
-                    <h4 className="text-lg font-semibold">Emergency Contact Information</h4>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="new_occupant_emergency_contact_name">Emergency Contact Name</Label>
-                        <Input
-                          id="new_occupant_emergency_contact_name"
-                          value={formData.new_occupant_emergency_contact_name}
-                          onChange={(e) => handleInputChange('new_occupant_emergency_contact_name', e.target.value)}
-                          placeholder="Full name of emergency contact"
-                          required
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_emergency_contact_number">Emergency Contact Phone</Label>
-                        <Input
-                          id="new_occupant_emergency_contact_number"
-                          value={formData.new_occupant_emergency_contact_number}
-                          onChange={(e) => handleInputChange('new_occupant_emergency_contact_number', e.target.value)}
-                          placeholder="Emergency contact phone number"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Owner-Specific Fields */}
-                {formData.new_occupant_type === 'new_owner' && (
-                  <div className="space-y-4">
-                    <h4 className="text-lg font-semibold">Owner-Specific Information</h4>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="new_occupant_title_deed_number">Title Deed Number</Label>
-                        <Input
-                          id="new_occupant_title_deed_number"
-                          value={formData.new_occupant_title_deed_number}
-                          onChange={(e) => handleInputChange('new_occupant_title_deed_number', e.target.value)}
-                          placeholder="Property title deed number"
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_acquisition_date">Acquisition Date</Label>
-                        <Input
-                          id="new_occupant_acquisition_date"
-                          type="date"
-                          value={formData.new_occupant_acquisition_date}
-                          onChange={(e) => handleInputChange('new_occupant_acquisition_date', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <h5 className="font-medium">Postal Address (if different from property address)</h5>
-                      <div className="grid md:grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor="new_occupant_postal_street_number">Postal Street Number</Label>
-                          <Input
-                            id="new_occupant_postal_street_number"
-                            value={formData.new_occupant_postal_street_number}
-                            onChange={(e) => handleInputChange('new_occupant_postal_street_number', e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="new_occupant_postal_street_name">Postal Street Name</Label>
-                          <Input
-                            id="new_occupant_postal_street_name"
-                            value={formData.new_occupant_postal_street_name}
-                            onChange={(e) => handleInputChange('new_occupant_postal_street_name', e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="new_occupant_postal_suburb">Suburb</Label>
-                          <Input
-                            id="new_occupant_postal_suburb"
-                            value={formData.new_occupant_postal_suburb}
-                            onChange={(e) => handleInputChange('new_occupant_postal_suburb', e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="grid md:grid-cols-3 gap-4">
-                        <div>
-                          <Label htmlFor="new_occupant_postal_city">City</Label>
-                          <Input
-                            id="new_occupant_postal_city"
-                            value={formData.new_occupant_postal_city}
-                            onChange={(e) => handleInputChange('new_occupant_postal_city', e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="new_occupant_postal_code">Postal Code</Label>
-                          <Input
-                            id="new_occupant_postal_code"
-                            value={formData.new_occupant_postal_code}
-                            onChange={(e) => handleInputChange('new_occupant_postal_code', e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
-                        
-                        <div>
-                          <Label htmlFor="new_occupant_postal_province">Province</Label>
-                          <Input
-                            id="new_occupant_postal_province"
-                            value={formData.new_occupant_postal_province}
-                            onChange={(e) => handleInputChange('new_occupant_postal_province', e.target.value)}
-                            placeholder="Optional"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_full_postal_address">Complete Postal Address</Label>
-                        <Input
-                          id="new_occupant_full_postal_address"
-                          value={formData.new_occupant_full_postal_address}
-                          onChange={(e) => handleInputChange('new_occupant_full_postal_address', e.target.value)}
-                          placeholder="Full postal address if different from property"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {formData.new_occupant_type !== 'unknown' && (
-                  <div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <Label htmlFor="new_occupant_adults">Adults</Label>
-                        <Input
-                          id="new_occupant_adults"
-                          type="number"
-                          min="0"
-                          value={formData.new_occupant_adults}
-                          onChange={(e) => handleInputChange('new_occupant_adults', e.target.value)}
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_children">Children</Label>
-                        <Input
-                          id="new_occupant_children"
-                          type="number"
-                          min="0"
-                          value={formData.new_occupant_children}
-                          onChange={(e) => handleInputChange('new_occupant_children', e.target.value)}
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="new_occupant_pets">Pets</Label>
-                        <Input
-                          id="new_occupant_pets"
-                          type="number"
-                          min="0"
-                          value={formData.new_occupant_pets}
-                          onChange={(e) => handleInputChange('new_occupant_pets', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Special Instructions */}
             <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Special Instructions</h3>
+              <h3 className="text-lg font-semibold">Transition Information</h3>
+              <p className="text-sm text-gray-600">Provide details about your transition that will help the admin process your request.</p>
               
               <div>
                 <Label htmlFor="access_handover_requirements">Access Handover Requirements</Label>
@@ -982,11 +805,12 @@ const UserTransitionRequest = () => {
                 <p className="text-sm text-gray-700 mb-2">By submitting this request, I acknowledge that:</p>
                 <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
                   <li>I have provided accurate information about my transition timeline</li>
-                  <li>I understand my community access will be updated according to the transition</li>
+                  <li>I understand the new occupant must register separately with their own information</li>
+                  <li>I will coordinate with the new occupant to ensure they register with the correct ERF number</li>
                   <li>I will provide at least 30 days notice for any changes to this timeline</li>
-                  <li>I will coordinate with property management for smooth handover</li>
                   <li>Outstanding community fees must be settled before transition</li>
                   <li>I will return all community access devices (remotes, cards, etc.)</li>
+                  <li>The admin will link this request with the new occupant's registration to complete the transition</li>
                 </ul>
               </div>
             </div>

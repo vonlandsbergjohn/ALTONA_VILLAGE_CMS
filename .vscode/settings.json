@@ -16,5 +16,47 @@
                 "Set-Location 'C:\\Altona_Village_CMS\\altona-village-frontend'; npm run dev"
             ]
         }
+    },
+    "files.watcherExclude": {
+        "**/.git/objects/**": true,
+        "**/.git/subtree-cache/**": true,
+        "**/node_modules/**": true,
+        "**/.venv/**": true,
+        "**/altona_village.db": true,
+        "**/altona_village_cms/src/database/app.db": true,
+        "**/*.db": true,
+        "**/__pycache__/**": true,
+        "**/.pytest_cache/**": true,
+        "**/dist/**": true,
+        "**/build/**": true
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/.venv": true,
+        "**/*.db": true,
+        "**/__pycache__": true,
+        "**/dist": true,
+        "**/build": true
+    },
+    "files.exclude": {
+        "**/.git": false,
+        "**/.DS_Store": true,
+        "**/Thumbs.db": true,
+        "**/__pycache__": true,
+        "**/.pytest_cache": true
+    },
+    "typescript.preferences.includePackageJsonAutoImports": "off",
+    "typescript.suggest.autoImports": false,
+    "javascript.suggest.autoImports": false,
+    "editor.quickSuggestions": {
+        "other": true,
+        "comments": false,
+        "strings": false
+    },
+    "extensions.autoUpdate": false,
+    "update.mode": "manual",
+    "python.defaultInterpreterPath": ".venv/Scripts/python.exe",
+    "files.associations": {
+        "*.db": "plaintext"
     }
 }

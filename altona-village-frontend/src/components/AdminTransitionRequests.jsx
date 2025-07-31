@@ -171,6 +171,41 @@ const AdminTransitionRequests = () => {
     }
   };
 
+  const cancelRequest = async (requestId) => {
+    if (!window.confirm('Are you sure you want to cancel this transition request? This action cannot be undone.')) {
+      return;
+    }
+
+    setUpdateLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/transition/admin/request/${requestId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: 'cancelled',
+          admin_notes: 'Request cancelled by admin'
+        })
+      });
+
+      if (response.ok) {
+        setSuccess('Request cancelled successfully');
+        fetchRequests();
+        setSelectedRequest(null);
+      } else {
+        setError('Failed to cancel request');
+      }
+    } catch (error) {
+      setError('Network error. Please try again.');
+      console.error('Error cancelling request:', error);
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
   const filterRequests = () => {
     let filtered = requests;
 
@@ -503,6 +538,14 @@ const AdminTransitionRequests = () => {
                                   className="w-full"
                                 >
                                   {updateLoading ? 'Updating...' : 'Update Status'}
+                                </Button>
+                                <Button 
+                                  onClick={() => cancelRequest(selectedRequest.id)} 
+                                  disabled={updateLoading || selectedRequest.status === 'cancelled'}
+                                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                                  variant="destructive"
+                                >
+                                  {updateLoading ? 'Cancelling...' : 'Cancel Request'}
                                 </Button>
                               </div>
 

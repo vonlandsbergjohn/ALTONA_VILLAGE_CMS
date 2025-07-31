@@ -51,7 +51,10 @@ const ProfileManagement = () => {
     setMessage({ type: '', text: '' });
 
     try {
-      const result = await updateUserProfile(profile);
+      // Exclude admin-only fields from the update
+      const { erf_number, intercom_code, ...updatableProfile } = profile;
+      
+      const result = await updateUserProfile(updatableProfile);
       
       if (result.success) {
         setMessage({ type: 'success', text: 'Profile updated successfully' });
@@ -273,11 +276,15 @@ const ProfileManagement = () => {
                       <Input
                         id="erf_number"
                         value={profile.erf_number}
-                        onChange={(e) => setProfile({...profile, erf_number: e.target.value})}
-                        placeholder="Your ERF number"
-                        className="pl-10"
+                        readOnly
+                        disabled
+                        placeholder="Admin managed"
+                        className="pl-10 bg-gray-50 text-gray-600 cursor-not-allowed"
                       />
                     </div>
+                    <p className="text-xs text-gray-500">
+                      ℹ️ Primary property identifier - managed by administration
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="intercom_code">Intercom Code</Label>
@@ -286,11 +293,15 @@ const ProfileManagement = () => {
                       <Input
                         id="intercom_code"
                         value={profile.intercom_code}
-                        onChange={(e) => setProfile({...profile, intercom_code: e.target.value})}
-                        placeholder="Enter your intercom access code"
-                        className="pl-10"
+                        readOnly
+                        disabled
+                        placeholder="Admin managed"
+                        className="pl-10 bg-gray-50 text-gray-600 cursor-not-allowed"
                       />
                     </div>
+                    <p className="text-xs text-gray-500">
+                      ⚠️ This code is managed by administration and cannot be changed by users
+                    </p>
                   </div>
                 </div>
 
