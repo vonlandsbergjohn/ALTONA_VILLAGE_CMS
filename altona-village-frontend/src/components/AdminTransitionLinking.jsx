@@ -73,6 +73,11 @@ const AdminTransitionLinking = () => {
     const matches = [];
     
     transitions.forEach(transition => {
+      // Skip cancelled requests
+      if (transition.status === 'cancelled') {
+        return;
+      }
+      
       // Include transitions that are:
       // 1. Not completed yet (normal flow)
       // 2. Completed but not properly migrated (needs linking fix)
@@ -205,7 +210,7 @@ const AdminTransitionLinking = () => {
               <ArrowRightLeft className="h-8 w-8 text-blue-600" />
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-600">Transition Requests</p>
-                <p className="text-2xl font-bold">{transitionRequests.length}</p>
+                <p className="text-2xl font-bold">{transitionRequests.filter(req => req.status !== 'cancelled').length}</p>
               </div>
             </div>
           </CardContent>

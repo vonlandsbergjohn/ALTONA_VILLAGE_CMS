@@ -41,9 +41,34 @@ def get_pending_registrations():
             user_data = user.to_dict()
             if user.resident:
                 user_data['resident'] = user.resident.to_dict()
+                user_data['erf_number'] = user.resident.erf_number  # Add ERF number for matching
+                user_data['first_name'] = user.resident.first_name
+                user_data['last_name'] = user.resident.last_name
+                user_data['phone_number'] = user.resident.phone_number
+                user_data['emergency_contact_name'] = user.resident.emergency_contact_name
+                user_data['emergency_contact_number'] = user.resident.emergency_contact_number
+                user_data['id_number'] = user.resident.id_number
+                user_data['address'] = user.resident.address
+                user_data['is_owner'] = user.is_owner()
+                user_data['is_resident'] = True
+            elif user.owner:
+                user_data['owner'] = user.owner.to_dict()
+                user_data['erf_number'] = user.owner.erf_number  # Add ERF number for matching
+                user_data['first_name'] = user.owner.first_name
+                user_data['last_name'] = user.owner.last_name
+                user_data['phone_number'] = user.owner.phone_number
+                user_data['emergency_contact_name'] = user.owner.emergency_contact_name
+                user_data['emergency_contact_number'] = user.owner.emergency_contact_number
+                user_data['id_number'] = user.owner.id_number
+                user_data['address'] = user.owner.address
+                user_data['is_owner'] = True
+                user_data['is_resident'] = user.is_resident()
             result.append(user_data)
         
-        return jsonify(result), 200
+        return jsonify({
+            'data': result,
+            'total': len(result)
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
