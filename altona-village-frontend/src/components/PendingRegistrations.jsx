@@ -15,7 +15,12 @@ const PendingRegistrations = () => {
     })
       .then(res => res.json())
       .then(data => {
-        setPending(data);
+        setPending(data.data || []);  // Extract the data array
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error('Error fetching pending registrations:', error);
+        setPending([]);
         setLoading(false);
       });
   }, []);
