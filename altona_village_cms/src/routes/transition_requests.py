@@ -1174,8 +1174,8 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
             print(f"   🚗 Deactivated vehicle: {vehicle.registration_number}")
         
         # Step 4: Update new user's role and activate existing records
-        # The new user already has resident/owner records from registration, just need to approve and activate
-        new_user.status = 'approved'  # Approve the registration
+        # The new user already has resident/owner records from registration, just need to activate
+        new_user.status = 'active'  # Activate the user (not just approve)
         
         # Determine role from registration data
         is_owner = new_user_data.get('is_owner', False)
@@ -1262,29 +1262,9 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
             db.session.add(new_owner)
             print(f"   🏠 Created missing owner record for ERF {erf_number}")
         
-        # Step 7: Handle vehicle transfers if requested
-        if transition_request.vehicle_registration_transfer and old_vehicles:
-            for old_vehicle in old_vehicles:
-                if old_vehicle.status == 'inactive':  # Only transfer the ones we just deactivated
-                    # Create new vehicle record for new user
-                    new_vehicle = Vehicle(
-                        registration_number=old_vehicle.registration_number,
-                        make=old_vehicle.make,
-                        model=old_vehicle.model,
-                        color=old_vehicle.color,
-                        status='active',
-                        migration_date=migration_date,
-                        migration_reason=f'Transferred from {old_user.email} via transition {transition_request.id}'
-                    )
-                    
-                    # Link to appropriate record
-                    if new_user.resident:
-                        new_vehicle.resident_id = new_user.resident.id
-                    elif new_user.owner:
-                        new_vehicle.owner_id = new_user.owner.id
-                    
-                    db.session.add(new_vehicle)
-                    print(f"   🚗 Transferred vehicle: {old_vehicle.registration_number}")
+        # Step 7: Vehicle handling - DO NOT TRANSFER vehicles to new users
+        # Vehicles remain deactivated with the old user (personal property)
+        print(f"   🚗 Vehicles remain deactivated with old user (not transferred)")
         
         db.session.commit()
         
@@ -1294,7 +1274,7 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
             'migration_type': 'linked_replacement',
             'old_user_id': old_user.id,
             'new_user_id': new_user.id,
-            'vehicles_transferred': len([v for v in old_vehicles if transition_request.vehicle_registration_transfer])
+            'vehicles_transferred': 0  # No vehicles transferred
         }
         
     except Exception as e:
