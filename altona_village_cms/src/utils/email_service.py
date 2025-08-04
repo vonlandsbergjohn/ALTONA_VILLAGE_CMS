@@ -232,3 +232,149 @@ This is an automated notification from the Altona Village Community Management S
         error_msg = f"Error sending admin notification email: {str(e)}"
         print(f"[EMAIL ERROR] {error_msg}")
         return False
+
+def send_transition_request_notification(to_email, user_name, erf_number, request_type):
+    """
+    Send notification when a new transition request is submitted
+    Returns: (success: bool, error_message: str)
+    """
+    try:
+        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        from_email = os.getenv('FROM_EMAIL')
+        from_password = os.getenv('EMAIL_PASSWORD')
+        app_url = os.getenv('APP_URL', 'http://localhost:5173')
+        
+        if not from_email or not from_password:
+            return False, "Email configuration missing"
+        
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = from_email
+        msg['To'] = to_email
+        msg['Subject'] = f'Transition Request Submitted - ERF {erf_number}'
+        
+        # Create HTML body
+        html_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #2563eb;">Transition Request Submitted</h2>
+                
+                <p>Dear {user_name},</p>
+                
+                <p>Your transition request has been successfully submitted and is now being reviewed by our admin team.</p>
+                
+                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="margin-top: 0;">Request Details:</h3>
+                    <ul style="margin: 0;">
+                        <li><strong>Property:</strong> ERF {erf_number}</li>
+                        <li><strong>Transition Type:</strong> {request_type.replace('_', ' ').title()}</li>
+                        <li><strong>Status:</strong> Pending Review</li>
+                        <li><strong>Submitted:</strong> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</li>
+                    </ul>
+                </div>
+                
+                <p>You can track the progress of your request by visiting:</p>
+                <p><a href="{app_url}/resident/transition-requests" style="color: #2563eb; text-decoration: none;">{app_url}/resident/transition-requests</a></p>
+                
+                <p>Our admin team will review your request and provide updates as the transition process progresses.</p>
+                
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+                <p style="font-size: 12px; color: #6b7280;">
+                    This is an automated email from Altona Village CMS. Please do not reply to this email.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(html_body, 'html'))
+        
+        # Send email
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(from_email, from_password)
+        server.send_message(msg)
+        server.quit()
+        
+        print(f"[EMAIL SUCCESS] Transition request notification sent to {to_email}")
+        return True, "Email sent successfully"
+        
+    except Exception as e:
+        error_msg = f"Error sending transition request notification: {str(e)}"
+        print(f"[EMAIL ERROR] {error_msg}")
+        return False, error_msg
+
+def send_transition_status_update(to_email, user_name, erf_number, old_status, new_status, admin_note=None):
+    """
+    Send notification when transition request status changes
+    Returns: (success: bool, error_message: str)
+    """
+    try:
+        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        from_email = os.getenv('FROM_EMAIL')
+        from_password = os.getenv('EMAIL_PASSWORD')
+        app_url = os.getenv('APP_URL', 'http://localhost:5173')
+        
+        if not from_email or not from_password:
+            return False, "Email configuration missing"
+        
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = from_email
+        msg['To'] = to_email
+        msg['Subject'] = f'Transition Update - ERF {erf_number} Status Changed'
+        
+        # Create HTML body
+        html_body = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #2563eb;">Transition Request Update</h2>
+                
+                <p>Dear {user_name},</p>
+                
+                <p>There's an update on your property transition request for ERF {erf_number}.</p>
+                
+                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="margin-top: 0;">Status Change:</h3>
+                    <p style="margin: 10px 0;">
+                        <span style="color: #ef4444; text-decoration: line-through;">{old_status.replace('_', ' ').title()}</span>
+                        <span style="margin: 0 10px;">→</span>
+                        <span style="color: #10b981; font-weight: bold;">{new_status.replace('_', ' ').title()}</span>
+                    </p>
+                    <p style="margin: 5px 0;"><strong>Updated:</strong> {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
+                </div>
+                
+                {f'<div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0;"><h4 style="margin-top: 0;">Admin Note:</h4><p style="margin-bottom: 0;">{admin_note}</p></div>' if admin_note else ''}
+                
+                <p>You can view full details and add comments by visiting:</p>
+                <p><a href="{app_url}/resident/transition-requests" style="color: #2563eb; text-decoration: none;">{app_url}/resident/transition-requests</a></p>
+                
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+                <p style="font-size: 12px; color: #6b7280;">
+                    This is an automated email from Altona Village CMS. Please do not reply to this email.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(html_body, 'html'))
+        
+        # Send email
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(from_email, from_password)
+        server.send_message(msg)
+        server.quit()
+        
+        print(f"[EMAIL SUCCESS] Transition status update sent to {to_email}")
+        return True, "Email sent successfully"
+        
+    except Exception as e:
+        error_msg = f"Error sending transition status update: {str(e)}"
+        print(f"[EMAIL ERROR] {error_msg}")
+        return False, error_msg

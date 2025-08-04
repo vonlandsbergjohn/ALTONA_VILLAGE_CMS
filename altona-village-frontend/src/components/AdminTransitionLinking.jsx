@@ -357,13 +357,13 @@ const AdminTransitionLinking = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Expected New Type:</span>
-                        <span className="font-medium">{pair.transition.expected_new_occupant_type || 'Not specified'}</span>
+                        <span className="font-medium">{pair.transition.new_occupant_type || 'Not specified'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Transition Date:</span>
                         <span className="font-medium">
-                          {pair.transition.expected_transition_date 
-                            ? format(new Date(pair.transition.expected_transition_date), 'MMM dd, yyyy')
+                          {pair.transition.expected_transfer_date 
+                            ? format(new Date(pair.transition.expected_transfer_date), 'MMM dd, yyyy')
                             : 'Not specified'
                           }
                         </span>

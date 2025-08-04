@@ -48,7 +48,7 @@ def get_pending_registrations():
                 user_data['emergency_contact_name'] = user.resident.emergency_contact_name
                 user_data['emergency_contact_number'] = user.resident.emergency_contact_number
                 user_data['id_number'] = user.resident.id_number
-                user_data['address'] = user.resident.address
+                user_data['address'] = user.resident.display_address
                 user_data['is_owner'] = user.is_owner()
                 user_data['is_resident'] = True
             elif user.owner:
@@ -60,7 +60,7 @@ def get_pending_registrations():
                 user_data['emergency_contact_name'] = user.owner.emergency_contact_name
                 user_data['emergency_contact_number'] = user.owner.emergency_contact_number
                 user_data['id_number'] = user.owner.id_number
-                user_data['address'] = user.owner.address
+                user_data['address'] = user.owner.display_address
                 user_data['is_owner'] = True
                 user_data['is_resident'] = user.is_resident()
             result.append(user_data)
@@ -1974,4 +1974,25 @@ def delete_resident_vehicle(user_id, vehicle_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/system-status', methods=['GET'])
+def get_system_status():
+    """Health check endpoint for Render deployment"""
+    try:
+        # Quick database check
+        user_count = User.query.count()
+        
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'users': user_count,
+            'timestamp': datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 

@@ -17,8 +17,8 @@ from src.routes.admin_notifications import admin_notifications
 from src.routes.transition_requests import transition_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
-app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
-app.config['JWT_SECRET_KEY'] = 'jwt-secret-string-change-in-production'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-string-change-in-production')
 
 # Enable CORS for all routes
 CORS(app)
@@ -54,10 +54,12 @@ with app.app_context():
             role='admin',
             status='active'
         )
-        admin_user.set_password('dGdFHLCJxx44ykq')  # Change this in production
+        # Use environment variable for admin password in production
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'dGdFHLCJxx44ykq')
+        admin_user.set_password(admin_password)
         db.session.add(admin_user)
         db.session.commit()
-        print("Default admin user created: vonlandsbergjohn@gmail.com / dGdFHLCJxx44ykq")
+        print(f"Default admin user created: vonlandsbergjohn@gmail.com")
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -77,4 +79,6 @@ def serve(path):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+    app.run(host='0.0.0.0', port=port, debug=debug)

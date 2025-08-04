@@ -19,6 +19,7 @@ import MyComplaints from '@/components/MyComplaints';
 import MyProperty from '@/components/MyProperty';
 import UserTransitionRequest from '@/components/UserTransitionRequest';
 import MyTransitionRequests from '@/components/MyTransitionRequests';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import './App.css';
 
 // Simple router component
@@ -154,9 +155,11 @@ const Router = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router />
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

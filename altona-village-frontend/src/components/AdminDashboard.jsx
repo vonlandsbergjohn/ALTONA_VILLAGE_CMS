@@ -41,12 +41,18 @@ const AdminDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
-      const [residents, properties, gateRegister, pendingRegs, complaints] = await Promise.all([
+      const [residents, properties, gateRegister, pendingRegs, complaints, transitions] = await Promise.all([
         adminAPI.getAllResidents(),
         adminAPI.getAllProperties(),
         adminAPI.getGateRegister(),
         adminAPI.getPendingRegistrations(),
-        adminAPI.getAllComplaints()
+        adminAPI.getAllComplaints(),
+        fetch('/api/transition/admin/requests', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json'
+          }
+        }).then(res => res.ok ? res.json() : { requests: [] })
       ]);
 
       const openComplaints = complaints.data.filter(c => c.status === 'open');
@@ -54,13 +60,24 @@ const AdminDashboard = () => {
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
         .slice(0, 5);
 
+      // Process transition data
+      const transitionRequests = transitions.requests || [];
+      const pendingTransitions = transitionRequests.filter(t => t.status === 'pending_review');
+      const inProgressTransitions = transitionRequests.filter(t => t.status === 'in_progress');
+      const urgentTransitions = transitionRequests.filter(t => t.priority === 'urgent' || t.priority === 'emergency');
+
       setStats({
         totalResidents: residents.data.length,
         totalProperties: properties.data.length,
         totalVehicles: gateRegister.data.total_vehicles || 0,
         pendingRegistrations: pendingRegs.data.length,
         openComplaints: openComplaints.length,
-        recentComplaints
+        recentComplaints,
+        // Add transition metrics
+        totalTransitions: transitionRequests.length,
+        pendingTransitions: pendingTransitions.length,
+        inProgressTransitions: inProgressTransitions.length,
+        urgentTransitions: urgentTransitions.length
       });
 
       // Load notification data
@@ -213,6 +230,38 @@ const AdminDashboard = () => {
           icon={MessageSquare}
           color="text-orange-600"
           description="Requiring attention"
+        />
+      </div>
+
+      {/* Transition System Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard
+          title="Pending Registrations"
+          value={stats.pendingRegistrations}
+          icon={Clock}
+          color="text-yellow-600"
+          description="New users awaiting approval"
+        />
+        <StatCard
+          title="Transition Requests"
+          value={stats.totalTransitions || 0}
+          icon={TrendingUp}
+          color="text-indigo-600"
+          description="Total property transitions"
+        />
+        <StatCard
+          title="Pending Transitions"
+          value={stats.pendingTransitions || 0}
+          icon={AlertTriangle}
+          color="text-amber-600"
+          description="Awaiting admin review"
+        />
+        <StatCard
+          title="Urgent Transitions"
+          value={stats.urgentTransitions || 0}
+          icon={Bell}
+          color="text-red-600"
+          description="High priority requests"
         />
       </div>
 
@@ -407,6 +456,49 @@ const AdminDashboard = () => {
               variant="outline"
             >
               View Gate Register
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Transition Management Cards */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-indigo-800">
+              <TrendingUp className="h-5 w-5 mr-2" />
+              Transition Requests
+            </CardTitle>
+            <CardDescription>
+              {stats.pendingTransitions || 0} pending transition requests
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              onClick={() => window.location.href = '/admin/transition-requests'}
+              className="w-full"
+              variant="outline"
+            >
+              Manage Transitions
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center text-purple-800">
+              <CheckCircle className="h-5 w-5 mr-2" />
+              Transition Linking
+            </CardTitle>
+            <CardDescription>
+              Link transition requests with new registrations
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              onClick={() => window.location.href = '/admin/transition-linking'}
+              className="w-full"
+              variant="outline"
+            >
+              Process Transitions
             </Button>
           </CardContent>
         </Card>

@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: altona-village-cms
+    runtime: python3
+    plan: free
+    buildCommand: |
+      cd altona-village-frontend && npm ci && npm run build
+      cp -r altona-village-frontend/dist/* altona_village_cms/src/static/
+    startCommand: cd altona_village_cms && python -m gunicorn --bind 0.0.0.0:$PORT src.main:app
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: PYTHON_VERSION
+        value: 3.11.8
+    healthCheckPath: /api/admin/system-status

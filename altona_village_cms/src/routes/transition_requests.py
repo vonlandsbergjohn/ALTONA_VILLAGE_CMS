@@ -881,8 +881,8 @@ def update_transition_request_status(request_id):
                 transition_request.new_occupant_first_name.strip() == '' or
                 not transition_request.new_occupant_last_name or 
                 transition_request.new_occupant_last_name.strip() == '' or
-                not transition_request.expected_new_occupant_type or
-                transition_request.expected_new_occupant_type in ['', 'unknown', None]
+                not transition_request.new_occupant_type or
+                transition_request.new_occupant_type in ['', 'unknown', None]
             )
             
             if is_privacy_compliant:
@@ -962,8 +962,8 @@ def add_admin_update_to_request(request_id):
                     transition_request.new_occupant_first_name.strip() == '' or
                     not transition_request.new_occupant_last_name or 
                     transition_request.new_occupant_last_name.strip() == '' or
-                    not transition_request.expected_new_occupant_type or
-                    transition_request.expected_new_occupant_type in ['', 'unknown', None]
+                    not transition_request.new_occupant_type or
+                    transition_request.new_occupant_type in ['', 'unknown', None]
                 )
                 
                 if is_privacy_compliant:
@@ -1117,7 +1117,7 @@ def link_and_process_transition():
             # Add admin update note
             update = TransitionRequestUpdate(
                 transition_request_id=transition_request.id,
-                admin_id=current_user.id,
+                user_id=current_user.id,
                 update_text=f"Transition completed by linking with registration {registration_id}. {result['message']}",
                 update_type='admin_note',
                 old_status='in_progress',
@@ -1151,7 +1151,7 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
     try:
         print(f"🔗 LINKED MIGRATION: {old_user.email} → {new_user.email}")
         print(f"   ERF: {transition_request.erf_number}")
-        print(f"   Expected type: {transition_request.expected_new_occupant_type}")
+        print(f"   Expected type: {transition_request.new_occupant_type}")
         
         # Step 1: Deactivate old user completely
         old_user.status = 'inactive' 
