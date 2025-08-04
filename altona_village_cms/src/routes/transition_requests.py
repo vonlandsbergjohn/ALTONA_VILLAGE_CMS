@@ -446,24 +446,9 @@ def handle_complete_user_replacement(transition_request, old_user, new_email):
             db.session.add(new_owner)
             print(f"   🏠 Created owner-resident records for ERF {erf_number}")
         
-        # Step 6: Handle vehicle transfers if requested
-        if transition_request.vehicle_registration_transfer:
-            transition_vehicles = TransitionVehicle.query.filter_by(
-                transition_request_id=transition_request.id
-            ).all()
-            
-            for trans_vehicle in transition_vehicles:
-                new_vehicle = Vehicle(
-                    resident_id=new_resident.id if new_resident else None,
-                    owner_id=new_owner.id if new_owner and not new_resident else None,
-                    registration_number=trans_vehicle.license_plate,
-                    make=trans_vehicle.vehicle_make,
-                    model=trans_vehicle.vehicle_model,
-                    color=trans_vehicle.color or 'Unknown',
-                    status='active'
-                )
-                db.session.add(new_vehicle)
-                print(f"   🚗 Transferred vehicle: {trans_vehicle.license_plate} ({trans_vehicle.vehicle_make} {trans_vehicle.vehicle_model})")
+        # Step 6: Vehicle handling - DO NOT TRANSFER vehicles to new users
+        # Vehicles remain deactivated with the old user as they are personal property
+        print(f"   🚗 Vehicles remain deactivated with old user (not transferred)")
         
         # Step 7: Record migration completion
         transition_request.migration_completed = True
@@ -1316,3 +1301,42 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
         db.session.rollback()
         print(f"   ❌ Linked migration failed: {str(e)}")
         return {'success': False, 'error': f'Linked migration failed: {str(e)}'}
+
+@transition_bp.route('/admin/request/<request_id>/mark-migration-completed', methods=['PUT'])
+@jwt_required()
+def mark_transition_migration_completed(request_id):
+    """Mark a transition request as migration completed (admin only)"""
+    try:
+        current_user = User.query.get(get_jwt_identity())
+        
+        if current_user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        transition_request = UserTransitionRequest.query.get_or_404(request_id)
+        
+        # Mark as migration completed
+        transition_request.migration_completed = True
+        transition_request.migration_date = datetime.utcnow()
+        transition_request.updated_at = datetime.utcnow()
+        
+        # Create update record
+        update = TransitionRequestUpdate(
+            transition_request_id=request_id,
+            user_id=current_user.id,
+            update_text="Migration manually marked as completed after successful transition linking",
+            update_type='admin_note'
+        )
+        
+        db.session.add(update)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Transition request marked as migration completed',
+            'migration_completed': True,
+            'migration_date': transition_request.migration_date.isoformat()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error marking transition as migration completed: {str(e)}")
+        return jsonify({'error': 'Failed to mark migration as completed'}), 500
