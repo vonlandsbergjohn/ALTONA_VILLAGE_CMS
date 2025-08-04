@@ -24,7 +24,8 @@ def get_gate_register():
     
     try:
         # Get all active users with active status
-        active_users = User.query.filter_by(status='active').all()
+        # Also include users who might be in transition states
+        active_users = User.query.filter(User.status.in_(['active', 'approved'])).all()
         
         gate_entries = []
         
@@ -54,6 +55,12 @@ def get_gate_register():
             
             if not primary_data:
                 continue  # Skip if no resident or owner data
+            
+            # Additional check: Only include residents/owners with active or approved status
+            if resident_data and resident_data.status not in ['active', 'approved']:
+                continue
+            if owner_data and not resident_data and owner_data.status not in ['active', 'approved']:
+                continue
             
             # Get vehicle registrations for this user
             vehicle_registrations = []
@@ -109,7 +116,8 @@ def export_gate_register_csv():
     
     try:
         # Get gate register data (reuse logic from above)
-        active_users = User.query.filter_by(status='active').all()
+        # Also include users who might be in transition states
+        active_users = User.query.filter(User.status.in_(['active', 'approved'])).all()
         gate_entries = []
         
         for user in active_users:
@@ -134,6 +142,12 @@ def export_gate_register_csv():
             primary_data = resident_data if resident_data else owner_data
             
             if not primary_data:
+                continue
+            
+            # Additional check: Only include residents/owners with active or approved status
+            if resident_data and resident_data.status not in ['active', 'approved']:
+                continue
+            if owner_data and not resident_data and owner_data.status not in ['active', 'approved']:
                 continue
             
             # Get vehicle registrations
