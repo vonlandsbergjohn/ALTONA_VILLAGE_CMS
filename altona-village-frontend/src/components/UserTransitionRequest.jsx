@@ -445,10 +445,12 @@ const UserTransitionRequest = () => {
                       <SelectItem value="resident">Resident Only (Tenant/Renter)</SelectItem>
                       <SelectItem value="owner">Owner Only (Property Owner)</SelectItem>
                       <SelectItem value="owner_resident">Owner-Resident (Owner who lives there)</SelectItem>
+                      <SelectItem value="terminated">Terminated/Exiting Estate (No future status)</SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-500 mt-1">
-                    🎯 What type of access should the new occupant have?
+                    🎯 What type of access should the new occupant have?<br/>
+                    ⚠️ <strong>Terminated/Exiting:</strong> Use this if you're leaving the estate entirely with no future status
                   </p>
                 </div>
               </div>

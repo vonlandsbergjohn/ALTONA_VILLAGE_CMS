@@ -47,7 +47,7 @@ def get_gate_register():
                 status = 'Resident'
                 resident_data = user.resident
             elif user.is_owner():
-                status = 'Non-Resident Owner'
+                status = 'Owner'
                 owner_data = user.owner
             
             # Get primary data source (residents get priority for intercom codes)
@@ -137,7 +137,7 @@ def export_gate_register_csv():
                 status = 'Resident'
                 resident_data = user.resident
             elif user.is_owner():
-                status = 'Non-Resident Owner'
+                status = 'Owner'
                 owner_data = user.owner
             
             primary_data = resident_data if resident_data else owner_data

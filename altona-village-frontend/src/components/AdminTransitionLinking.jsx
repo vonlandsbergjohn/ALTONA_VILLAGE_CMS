@@ -103,6 +103,16 @@ const AdminTransitionLinking = () => {
     setLinkedPairs(matches);
   };
 
+  const formatOccupantType = (type) => {
+    const typeMap = {
+      'resident': 'Resident Only (Tenant/Renter)',
+      'owner': 'Owner Only (Property Owner)',
+      'owner_resident': 'Owner-Resident (Owner who lives there)',
+      'terminated': 'Terminated/Exiting Estate (No future status)'
+    };
+    return typeMap[type] || type || 'Not specified';
+  };
+
   const linkAndProcessTransition = async (transitionRequest, registration) => {
     setProcessingLink(true);
     setError('');
@@ -357,7 +367,7 @@ const AdminTransitionLinking = () => {
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Future Residency Status:</span>
-                        <span className="font-medium">{pair.transition.new_occupant_type || 'Not specified'}</span>
+                        <span className="font-medium">{formatOccupantType(pair.transition.new_occupant_type)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Transition Date:</span>

@@ -491,7 +491,7 @@ def create_transition_request():
             return jsonify({'error': 'Invalid request type'}), 400
         
         # Validate new occupant type (future residency status)
-        valid_occupant_types = ['resident', 'owner', 'owner_resident']
+        valid_occupant_types = ['resident', 'owner', 'owner_resident', 'terminated']
         if data['new_occupant_type'] not in valid_occupant_types:
             return jsonify({'error': 'Invalid future residency status'}), 400
         
@@ -1142,6 +1142,11 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
         print(f"   ERF: {transition_request.erf_number}")
         print(f"   Expected new type: {transition_request.new_occupant_type}")
         
+        # Initialize common variables
+        erf_number = transition_request.erf_number
+        migration_date = datetime.utcnow()
+        migration_reason = f'Linked transition {transition_request.id} with {new_user.email}'
+        
         # Determine old user's current role combination
         old_is_resident = old_user.resident and old_user.resident.status == 'active'
         old_is_owner = old_user.owner and old_user.owner.status == 'active'
@@ -1155,9 +1160,27 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
         else:
             old_role = 'unknown'
         
-        # Determine new user's intended role from new_user_data
-        new_is_resident = new_user_data.get('is_resident', False)
-        new_is_owner = new_user_data.get('is_owner', False)
+        # Determine new user's intended role from transition request new_occupant_type
+        intended_type = transition_request.new_occupant_type
+        
+        # Map new_occupant_type to role flags
+        if intended_type == 'resident':
+            new_is_resident = True
+            new_is_owner = False
+        elif intended_type == 'owner':
+            new_is_resident = False
+            new_is_owner = True
+        elif intended_type == 'owner_resident':
+            new_is_resident = True
+            new_is_owner = True
+        elif intended_type == 'terminated':
+            # Special case: current user is leaving estate entirely - no new user needed
+            new_is_resident = False
+            new_is_owner = False
+        else:
+            # Fallback to registration data
+            new_is_resident = new_user_data.get('is_resident', False)
+            new_is_owner = new_user_data.get('is_owner', False)
         
         if new_is_resident and new_is_owner:
             new_role = 'owner_resident'
@@ -1165,12 +1188,71 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
             new_role = 'owner'
         elif new_is_resident:
             new_role = 'resident'
+        elif intended_type == 'terminated':
+            new_role = 'terminated'  # Special case for leaving estate
         else:
             new_role = 'resident'  # Default
         
-        print(f"   🔄 Transition: {old_role} → {new_role}")
+        print(f"   🔄 Transition: {old_role} → {new_role} (intended: {intended_type})")
         
-        # Determine transition type
+        # Special case: If terminated, this is a pure deactivation (no new user)
+        if intended_type == 'terminated':
+            print(f"   🚪 TERMINATION: Old user exits estate completely")
+            
+            # Update migration reason for termination
+            migration_reason = f'User terminated/exited estate via transition {transition_request.id}'
+            
+            # Step 1: Deactivate old user completely
+            old_user.status = 'inactive' 
+            old_user.password_hash = 'DISABLED'
+            print(f"   ❌ Deactivated old user: {old_user.email}")
+            
+            # Step 2: Mark old user's records as deleted_profile
+            if old_user.resident:
+                old_user.resident.status = 'deleted_profile'
+                old_user.resident.migration_date = migration_date
+                old_user.resident.migration_reason = migration_reason
+                print(f"   📝 Marked old resident record as deleted_profile")
+            
+            if old_user.owner:
+                old_user.owner.status = 'deleted_profile'
+                old_user.owner.migration_date = migration_date
+                old_user.owner.migration_reason = migration_reason
+                print(f"   📝 Marked old owner record as deleted_profile")
+            
+            # Step 3: Deactivate old vehicles
+            old_vehicles = []
+            if old_user.resident:
+                old_vehicles.extend(Vehicle.query.filter_by(resident_id=old_user.resident.id).all())
+            if old_user.owner:
+                old_vehicles.extend(Vehicle.query.filter_by(owner_id=old_user.owner.id).all())
+            
+            for vehicle in old_vehicles:
+                vehicle.status = 'inactive'
+                vehicle.migration_date = migration_date
+                vehicle.migration_reason = migration_reason
+                print(f"   🚗 Deactivated vehicle: {vehicle.registration_number}")
+            
+            # Step 4: Mark transition as completed (no new user)
+            transition_request.migration_completed = True
+            transition_request.migration_date = migration_date
+            transition_request.new_user_id = None  # No new user for termination
+            transition_request.status = 'completed'
+            
+            db.session.commit()
+            
+            return {
+                'success': True,
+                'message': f'Successfully terminated user access for ERF {erf_number}. User exited estate.',
+                'migration_type': 'termination',
+                'old_user_id': old_user.id,
+                'old_user_status': 'inactive',
+                'new_user_id': None,
+                'vehicles_transferred': 0,
+                'vehicles_deactivated': len(old_vehicles)
+            }
+        
+        # Determine transition type for normal transitions (with new user)
         is_partial_replacement = False
         old_keeps_owner = False
         old_keeps_resident = False
@@ -1194,10 +1276,6 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
             print(f"   📋 COMPLETE REPLACEMENT: Old user loses all roles")
         
         # Execute migration based on type
-        erf_number = transition_request.erf_number
-        migration_reason = f'Linked transition {transition_request.id} with {new_user.email}'
-        migration_date = datetime.utcnow()
-        
         if is_partial_replacement:
             # PARTIAL REPLACEMENT: Old user keeps active but loses some roles
             print(f"   🔄 Executing partial replacement...")

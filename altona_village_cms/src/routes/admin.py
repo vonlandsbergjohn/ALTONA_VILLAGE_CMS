@@ -273,7 +273,7 @@ def update_resident(user_id):
             old_values['property_address'] = user.resident.full_address if user.resident else (user.owner.full_address if user.owner else '')
         
         if 'resident_status_change' in data or 'tenant_or_owner' in data:
-            old_values['resident_status'] = 'Owner-Resident' if (user.resident and user.owner) else ('Resident' if user.resident else 'Non-Resident Owner')
+            old_values['resident_status'] = 'Owner-Resident' if (user.resident and user.owner) else ('Resident' if user.resident else 'Owner')
         
         # Update user basic info
         if 'email' in data:
@@ -756,7 +756,7 @@ def get_gate_register():
                 status = 'Resident'
                 resident_data = user.resident
             elif user.owner:
-                status = 'Non-Resident Owner'
+                status = 'Owner'
                 owner_data = user.owner
             
             primary_data = resident_data if resident_data else owner_data
@@ -846,7 +846,7 @@ def export_gate_register():
                 status = 'Resident'
                 resident_data = user.resident
             elif user.owner:
-                status = 'Non-Resident Owner'
+                status = 'Owner'
                 owner_data = user.owner
             
             primary_data = resident_data if resident_data else owner_data
@@ -1563,7 +1563,7 @@ def get_owners_group():
                 'id': user.id,
                 'email': user.email,
                 'name': user.get_full_name(),
-                'type': 'Owner-Resident' if user.is_owner_resident() else 'Non-Resident Owner',
+                'type': 'Owner-Resident' if user.is_owner_resident() else 'Owner',
                 'is_resident': user.is_resident(),
                 'is_owner': True,
                 'is_owner_resident': user.is_owner_resident(),
@@ -1604,7 +1604,7 @@ def get_non_resident_owners():
                 'id': user.id,
                 'email': user.email,
                 'name': user.get_full_name(),
-                'type': 'Non-Resident Owner',
+                'type': 'Owner',
                 'is_resident': False,
                 'is_owner': True,
                 'is_owner_resident': False,

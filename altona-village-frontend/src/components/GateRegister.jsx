@@ -48,7 +48,7 @@ const GateRegister = () => {
           case 'resident':
             return status === 'resident';
           case 'owner':
-            return status === 'non-resident owner';
+            return status === 'owner';
           case 'owner-resident':
             return status === 'owner-resident';
           default:
@@ -152,7 +152,7 @@ const GateRegister = () => {
         case 'resident':
           stats.residents++;
           break;
-        case 'non-resident owner':
+        case 'owner':
           stats.owners++;
           break;
         case 'owner-resident':
@@ -237,7 +237,7 @@ const GateRegister = () => {
         case 'Resident':
           stats.residents++;
           break;
-        case 'Non-Resident Owner':
+        case 'Owner':
           stats.owners++;
           break;
         case 'Owner-Resident':
@@ -336,7 +336,7 @@ const GateRegister = () => {
   const getStatusBadge = (status) => {
     const variants = {
       'Resident': 'bg-blue-100 text-blue-800',
-      'Non-Resident Owner': 'bg-green-100 text-green-800',
+      'Owner': 'bg-green-100 text-green-800',
       'Owner-Resident': 'bg-purple-100 text-purple-800'
     };
     
@@ -441,7 +441,7 @@ const GateRegister = () => {
                 className="flex items-center gap-1"
               >
                 <Building className="h-3 w-3" />
-                Non-Resident Owners ({stats.owners})
+                Owners ({stats.owners})
               </Button>
               <Button
                 variant={filters.statusFilter === 'owner-resident' ? 'default' : 'outline'}
@@ -748,7 +748,7 @@ const GateRegister = () => {
         <CardContent className="space-y-2 text-sm">
           <div className="flex items-start gap-2">
             <span className="font-semibold text-blue-600">•</span>
-            <span>All status groups (<strong>Residents</strong>, <strong>Owner-Residents</strong>, and <strong>Non-Resident Owners</strong>) can have intercom codes if assigned</span>
+            <span>All status groups (<strong>Residents</strong>, <strong>Owner-Residents</strong>, and <strong>Owners</strong>) can have intercom codes if assigned</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="font-semibold text-green-600">•</span>
