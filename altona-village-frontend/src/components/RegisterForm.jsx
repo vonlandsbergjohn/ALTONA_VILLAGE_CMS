@@ -236,6 +236,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                     value={formData.erf_number}
                     onChange={handleErfChange}
                     placeholder="e.g. 123"
+                    autoComplete="off"
                     required
                     disabled={erfLoading}
                   />

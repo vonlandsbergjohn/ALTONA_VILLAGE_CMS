@@ -115,6 +115,7 @@ export const ErfInputWithAutoFill = ({
         onChange={handleErfChange}
         disabled={disabled || loading}
         placeholder={placeholder}
+        autoComplete="off"
         className={`${className} ${loading ? 'opacity-50' : ''}`}
         {...props}
       />
