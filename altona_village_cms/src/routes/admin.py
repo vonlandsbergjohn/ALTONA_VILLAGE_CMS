@@ -4,12 +4,10 @@ from sqlalchemy import text
 from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, ErfAddressMapping, db
 from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
-import pandas as pd
 import io
 import csv
-import csv
-import io
 import os
+import sqlite3
 
 # Import change tracking function
 try:
@@ -2051,31 +2049,42 @@ def upload_address_mappings():
         # Read file content
         try:
             if file.filename.lower().endswith('.csv'):
-                # Read CSV file
+                # Read CSV file using built-in csv module
                 content = file.read().decode('utf-8')
-                df = pd.read_csv(io.StringIO(content))
+                import csv
+                reader = csv.DictReader(io.StringIO(content))
+                data = list(reader)
             else:
-                # Read Excel file
-                df = pd.read_excel(file)
+                # Read Excel file (requires pandas)
+                try:
+                    import pandas as pd
+                    df = pd.read_excel(file)
+                    data = df.to_dict('records')
+                except ImportError:
+                    return jsonify({
+                        'error': 'pandas and openpyxl libraries are required for Excel file processing. Please install them with: pip install pandas openpyxl'
+                    }), 500
         except Exception as e:
             return jsonify({'error': f'Failed to read file: {str(e)}'}), 400
         
         # Validate required columns
         required_columns = ['erf_number', 'street_number', 'street_name']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        
-        if missing_columns:
-            return jsonify({
-                'error': f'Missing required columns: {", ".join(missing_columns)}',
-                'required_columns': required_columns,
-                'found_columns': list(df.columns)
-            }), 400
+        if data:
+            first_row = data[0]
+            missing_columns = [col for col in required_columns if col not in first_row.keys()]
+            
+            if missing_columns:
+                return jsonify({
+                    'error': f'Missing required columns: {", ".join(missing_columns)}',
+                    'required_columns': required_columns,
+                    'found_columns': list(first_row.keys())
+                }), 400
         
         # Process and validate data
         address_data = []
         errors = []
         
-        for index, row in df.iterrows():
+        for index, row in enumerate(data):
             try:
                 erf_number = str(row['erf_number']).strip()
                 street_number = str(row['street_number']).strip()
@@ -2098,8 +2107,8 @@ def upload_address_mappings():
                 full_address = f"{street_number} {street_name}"
                 
                 # Optional fields
-                suburb = str(row.get('suburb', '')).strip() if 'suburb' in row and pd.notna(row.get('suburb')) else ''
-                postal_code = str(row.get('postal_code', '')).strip() if 'postal_code' in row and pd.notna(row.get('postal_code')) else ''
+                suburb = str(row.get('suburb', '')).strip() if 'suburb' in row and row.get('suburb') not in [None, '', 'nan', 'NaN'] else ''
+                postal_code = str(row.get('postal_code', '')).strip() if 'postal_code' in row and row.get('postal_code') not in [None, '', 'nan', 'NaN'] else ''
                 
                 if suburb:
                     full_address += f", {suburb}"
