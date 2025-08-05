@@ -1095,9 +1095,8 @@ def link_and_process_transition():
             transition_request.migration_date = datetime.utcnow()
             transition_request.new_user_id = pending_registration.id
             
-            # Approve the pending registration (this should already be done in perform_linked_migration but double-check)
-            pending_registration.status = 'approved'
-            print(f"✅ Set pending registration status to approved: {pending_registration.email}")
+            # Note: User status is set in perform_linked_migration function
+            print(f"✅ Migration completed for user: {pending_registration.email}")
             
             # Add admin update note
             update = TransitionRequestUpdate(
@@ -1130,74 +1129,151 @@ def link_and_process_transition():
 
 def perform_linked_migration(transition_request, old_user, new_user, new_user_data):
     """
-    New migration approach that works with the privacy-compliant workflow.
-    Links a transition request with a separately registered new user.
+    Comprehensive migration approach that handles ALL transition combinations.
+    Supports both complete replacements and partial replacements.
     """
     try:
         print(f"🔗 LINKED MIGRATION: {old_user.email} → {new_user.email}")
         print(f"   ERF: {transition_request.erf_number}")
-        print(f"   Expected type: {transition_request.new_occupant_type}")
+        print(f"   Expected new type: {transition_request.new_occupant_type}")
         
-        # Step 1: Deactivate old user completely
-        old_user.status = 'inactive' 
-        old_user.password_hash = 'DISABLED'
-        print(f"   ❌ Deactivated old user: {old_user.email}")
+        # Determine old user's current role combination
+        old_is_resident = old_user.resident and old_user.resident.status == 'active'
+        old_is_owner = old_user.owner and old_user.owner.status == 'active'
         
-        # Step 2: Mark old user's records as deleted_profile for audit trail
+        if old_is_resident and old_is_owner:
+            old_role = 'owner_resident'
+        elif old_is_owner:
+            old_role = 'owner'
+        elif old_is_resident:
+            old_role = 'resident'
+        else:
+            old_role = 'unknown'
+        
+        # Determine new user's intended role from new_user_data
+        new_is_resident = new_user_data.get('is_resident', False)
+        new_is_owner = new_user_data.get('is_owner', False)
+        
+        if new_is_resident and new_is_owner:
+            new_role = 'owner_resident'
+        elif new_is_owner:
+            new_role = 'owner'
+        elif new_is_resident:
+            new_role = 'resident'
+        else:
+            new_role = 'resident'  # Default
+        
+        print(f"   🔄 Transition: {old_role} → {new_role}")
+        
+        # Determine transition type
+        is_partial_replacement = False
+        old_keeps_owner = False
+        old_keeps_resident = False
+        
+        if old_role == 'owner_resident':
+            if new_role == 'resident':
+                # Owner-resident rents out but keeps ownership
+                is_partial_replacement = True
+                old_keeps_owner = True
+                print(f"   📋 PARTIAL REPLACEMENT: Old user keeps owner role")
+            elif new_role == 'owner':
+                # Owner-resident sells ownership but stays as tenant
+                is_partial_replacement = True
+                old_keeps_resident = True
+                print(f"   📋 PARTIAL REPLACEMENT: Old user keeps resident role")
+            else:
+                # Complete replacement
+                print(f"   📋 COMPLETE REPLACEMENT: Old user loses all roles")
+        else:
+            # All other scenarios are complete replacements
+            print(f"   📋 COMPLETE REPLACEMENT: Old user loses all roles")
+        
+        # Execute migration based on type
         erf_number = transition_request.erf_number
-        migration_reason = f'Replaced by {new_user.email} via linked transition {transition_request.id}'
+        migration_reason = f'Linked transition {transition_request.id} with {new_user.email}'
         migration_date = datetime.utcnow()
         
-        if old_user.resident:
-            old_user.resident.status = 'deleted_profile'
-            old_user.resident.migration_date = migration_date
-            old_user.resident.migration_reason = migration_reason
-            print(f"   📝 Marked old resident record as deleted_profile")
-        
-        if old_user.owner:
-            old_user.owner.status = 'deleted_profile'
-            old_user.owner.migration_date = migration_date
-            old_user.owner.migration_reason = migration_reason
-            print(f"   📝 Marked old owner record as deleted_profile")
-        
-        # Step 3: Deactivate old vehicles
-        old_vehicles = []
-        if old_user.resident:
-            old_vehicles.extend(Vehicle.query.filter_by(resident_id=old_user.resident.id).all())
-        if old_user.owner:
-            old_vehicles.extend(Vehicle.query.filter_by(owner_id=old_user.owner.id).all())
-        
-        for vehicle in old_vehicles:
-            vehicle.status = 'inactive'
-            vehicle.migration_date = migration_date
-            vehicle.migration_reason = migration_reason
-            print(f"   🚗 Deactivated vehicle: {vehicle.registration_number}")
-        
-        # Step 4: Update new user's role and activate existing records
-        # The new user already has resident/owner records from registration, just need to activate
-        new_user.status = 'active'  # Activate the user (not just approve)
-        
-        # Determine role from registration data
-        is_owner = new_user_data.get('is_owner', False)
-        is_resident = new_user_data.get('is_resident', False)
-        
-        if is_owner and is_resident:
-            new_user.role = 'owner_resident'
-        elif is_owner:
-            new_user.role = 'owner'
-        elif is_resident:
-            new_user.role = 'resident'
+        if is_partial_replacement:
+            # PARTIAL REPLACEMENT: Old user keeps active but loses some roles
+            print(f"   🔄 Executing partial replacement...")
+            
+            # Old user stays active
+            print(f"   ✅ Keeping old user active: {old_user.email}")
+            
+            # Handle old user's records based on what they keep
+            if old_keeps_owner:
+                # Old user keeps owner role, loses resident role
+                old_user.role = 'owner'
+                if old_user.resident:
+                    old_user.resident.status = 'deleted_profile'
+                    old_user.resident.migration_date = migration_date
+                    old_user.resident.migration_reason = migration_reason
+                    print(f"   📝 Marked old resident record as deleted_profile")
+                if old_user.owner:
+                    print(f"   ✅ Keeping old owner record active")
+                    
+            elif old_keeps_resident:
+                # Old user keeps resident role, loses owner role
+                old_user.role = 'resident'
+                if old_user.owner:
+                    old_user.owner.status = 'deleted_profile'
+                    old_user.owner.migration_date = migration_date
+                    old_user.owner.migration_reason = migration_reason
+                    print(f"   📝 Marked old owner record as deleted_profile")
+                if old_user.resident:
+                    print(f"   ✅ Keeping old resident record active")
+            
+            # Vehicles stay with old user (don't transfer)
+            print(f"   🚗 Vehicles remain with old user (no transfer)")
+            
         else:
-            new_user.role = 'resident'  # Default
+            # COMPLETE REPLACEMENT: Old user loses everything
+            print(f"   🔄 Executing complete replacement...")
+            
+            # Step 1: Deactivate old user completely
+            old_user.status = 'inactive' 
+            old_user.password_hash = 'DISABLED'
+            print(f"   ❌ Deactivated old user: {old_user.email}")
+            
+            # Step 2: Mark old user's records as deleted_profile
+            if old_user.resident:
+                old_user.resident.status = 'deleted_profile'
+                old_user.resident.migration_date = migration_date
+                old_user.resident.migration_reason = migration_reason
+                print(f"   � Marked old resident record as deleted_profile")
+            
+            if old_user.owner:
+                old_user.owner.status = 'deleted_profile'
+                old_user.owner.migration_date = migration_date
+                old_user.owner.migration_reason = migration_reason
+                print(f"   📝 Marked old owner record as deleted_profile")
+            
+            # Step 3: Deactivate old vehicles
+            old_vehicles = []
+            if old_user.resident:
+                old_vehicles.extend(Vehicle.query.filter_by(resident_id=old_user.resident.id).all())
+            if old_user.owner:
+                old_vehicles.extend(Vehicle.query.filter_by(owner_id=old_user.owner.id).all())
+            
+            for vehicle in old_vehicles:
+                vehicle.status = 'inactive'
+                vehicle.migration_date = migration_date
+                vehicle.migration_reason = migration_reason
+                print(f"   🚗 Deactivated vehicle: {vehicle.registration_number}")
         
-        # Step 5: Activate existing resident record if user is a resident
-        if is_resident and new_user.resident:
+        # Step 4: Activate new user with appropriate role
+        new_user.status = 'active'
+        new_user.role = new_role
+        print(f"   ✅ Activated new user as {new_role}: {new_user.email}")
+        
+        # Step 5: Activate new user's existing records based on their role
+        if new_is_resident and new_user.resident:
             new_user.resident.status = 'active'
-            new_user.resident.erf_number = erf_number  # Ensure ERF number is correct
-            new_user.resident.intercom_code = 'ADMIN_SET_REQUIRED'  # Will be set by admin
+            new_user.resident.erf_number = erf_number
+            new_user.resident.intercom_code = 'ADMIN_SET_REQUIRED'
             print(f"   🏠 Activated existing resident record for ERF {erf_number}")
-        elif is_resident and not new_user.resident:
-            # Fallback: create resident record if somehow missing
+        elif new_is_resident and not new_user.resident:
+            # Fallback: create resident record if missing
             new_resident = Resident(
                 user_id=new_user.id,
                 first_name=new_user_data.get('first_name', ''),
@@ -1211,25 +1287,16 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
                 intercom_code='ADMIN_SET_REQUIRED',
                 status='active'
             )
-            
-            # Parse address if provided
-            address = new_user_data.get('address', '')
-            if ' ' in address:
-                parts = address.split(' ', 1)
-                new_resident.street_number = parts[0]
-                new_resident.street_name = parts[1]
-            
             db.session.add(new_resident)
             print(f"   🏠 Created missing resident record for ERF {erf_number}")
         
-        # Step 6: Activate existing owner record if user is an owner
-        if is_owner and new_user.owner:
+        if new_is_owner and new_user.owner:
             new_user.owner.status = 'active'
-            new_user.owner.erf_number = erf_number  # Ensure ERF number is correct
-            new_user.owner.intercom_code = 'ADMIN_SET_REQUIRED'  # Will be set by admin
+            new_user.owner.erf_number = erf_number
+            new_user.owner.intercom_code = 'ADMIN_SET_REQUIRED'
             print(f"   🏠 Activated existing owner record for ERF {erf_number}")
-        elif is_owner and not new_user.owner:
-            # Fallback: create owner record if somehow missing
+        elif new_is_owner and not new_user.owner:
+            # Fallback: create owner record if missing
             new_owner = Owner(
                 user_id=new_user.id,
                 first_name=new_user_data.get('first_name', ''),
@@ -1241,7 +1308,7 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
                 street_name='Main Street',
                 full_address=new_user_data.get('address', f'{erf_number} Main Street'),
                 intercom_code='ADMIN_SET_REQUIRED',
-                title_deed_number='T000000',  # Admin should set this
+                title_deed_number='T000000',
                 postal_street_number='1',
                 postal_street_name='Main Street',
                 postal_suburb='Suburb',
@@ -1251,30 +1318,29 @@ def perform_linked_migration(transition_request, old_user, new_user, new_user_da
                 full_postal_address=f'1 Main Street, Suburb, City, 0000',
                 status='active'
             )
-            
-            # Parse address if provided
-            address = new_user_data.get('address', '')
-            if ' ' in address:
-                parts = address.split(' ', 1)
-                new_owner.street_number = parts[0]
-                new_owner.street_name = parts[1]
-            
             db.session.add(new_owner)
             print(f"   🏠 Created missing owner record for ERF {erf_number}")
         
-        # Step 7: Vehicle handling - DO NOT TRANSFER vehicles to new users
-        # Vehicles remain deactivated with the old user (personal property)
-        print(f"   🚗 Vehicles remain deactivated with old user (not transferred)")
+        # Step 6: Record migration completion
+        transition_request.migration_completed = True
+        transition_request.migration_date = migration_date
+        transition_request.new_user_id = new_user.id
+        transition_request.status = 'completed'
         
         db.session.commit()
         
+        # Create result summary
+        vehicles_affected = 0 if is_partial_replacement else len(old_vehicles) if 'old_vehicles' in locals() else 0
+        
         return {
             'success': True,
-            'message': f'Successfully migrated ERF {erf_number} from {old_user.email} to {new_user.email}',
-            'migration_type': 'linked_replacement',
+            'message': f'Successfully migrated ERF {erf_number}: {old_role} → {new_role}',
+            'migration_type': 'partial_replacement' if is_partial_replacement else 'complete_replacement',
             'old_user_id': old_user.id,
+            'old_user_status': 'active' if is_partial_replacement else 'inactive',
             'new_user_id': new_user.id,
-            'vehicles_transferred': 0  # No vehicles transferred
+            'vehicles_transferred': 0,  # No vehicles transferred (business rule)
+            'vehicles_deactivated': vehicles_affected
         }
         
     except Exception as e:
