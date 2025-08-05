@@ -57,9 +57,10 @@ def get_gate_register():
                 continue  # Skip if no resident or owner data
             
             # Additional check: Only include residents/owners with active or approved status
+            # For Owner-Residents, check both records are active
             if resident_data and resident_data.status not in ['active', 'approved']:
                 continue
-            if owner_data and not resident_data and owner_data.status not in ['active', 'approved']:
+            if owner_data and owner_data.status not in ['active', 'approved']:
                 continue
             
             # Get vehicle registrations for this user
@@ -145,9 +146,10 @@ def export_gate_register_csv():
                 continue
             
             # Additional check: Only include residents/owners with active or approved status
+            # For Owner-Residents, check both records are active
             if resident_data and resident_data.status not in ['active', 'approved']:
                 continue
-            if owner_data and not resident_data and owner_data.status not in ['active', 'approved']:
+            if owner_data and owner_data.status not in ['active', 'approved']:
                 continue
             
             # Get vehicle registrations
