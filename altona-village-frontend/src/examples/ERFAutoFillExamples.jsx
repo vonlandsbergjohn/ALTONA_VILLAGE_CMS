@@ -7,7 +7,7 @@
 
 // Example 1: Using the useAddressAutoFill hook in a React component
 import React, { useState } from 'react';
-import { useAddressAutoFill } from '@/lib/useAddressAutoFill';
+import { useAddressAutoFill, ErfInputWithAutoFill, autoFillAddressFields } from '@/hooks/useAddressAutoFill.jsx';
 
 const RegistrationFormExample = () => {
   const [formData, setFormData] = useState({
@@ -72,7 +72,6 @@ const RegistrationFormExample = () => {
 };
 
 // Example 2: Using the ErfInputWithAutoFill component (even simpler)
-import { ErfInputWithAutoFill } from '@/lib/useAddressAutoFill';
 
 const SimpleFormExample = () => {
   const [formData, setFormData] = useState({
@@ -117,7 +116,6 @@ const SimpleFormExample = () => {
 };
 
 // Example 3: Using the utility function directly for manual control
-import { autoFillAddressFields } from '@/lib/useAddressAutoFill';
 
 const ManualControlExample = () => {
   const handleErfBlur = async (erfNumber) => {

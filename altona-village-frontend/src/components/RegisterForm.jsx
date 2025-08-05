@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, Home, CheckCircle, MapPin } from 'lucide-react';
+import { Loader2, Home, CheckCircle, MapPin, Search } from 'lucide-react';
 import EnhancedAltonaVillageMap from './EnhancedAltonaVillageMap';
+import { useAddressAutoFill } from '@/hooks/useAddressAutoFill.jsx';
 
 const RegisterForm = ({ onSwitchToLogin }) => {
   const [formData, setFormData] = useState({
@@ -32,6 +33,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
   const [showMap, setShowMap] = useState(false);
 
   const { register } = useAuth();
+  const { lookupAddress, loading: erfLoading, error: erfError, clearError } = useAddressAutoFill();
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -39,6 +41,38 @@ const RegisterForm = ({ onSwitchToLogin }) => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+  };
+
+  // Handle ERF number change with autofill
+  const handleErfChange = async (e) => {
+    const erfNumber = e.target.value;
+    
+    // Update the ERF number in form data
+    setFormData(prev => ({
+      ...prev,
+      erf_number: erfNumber
+    }));
+
+    // Clear any previous ERF lookup errors
+    clearError();
+
+    // Attempt autofill if ERF number has enough digits
+    if (erfNumber && erfNumber.trim().length >= 2) {
+      try {
+        const addressData = await lookupAddress(erfNumber);
+        if (addressData) {
+          // Auto-fill the address fields
+          setFormData(prev => ({
+            ...prev,
+            street_number: addressData.street_number || '',
+            street_name: addressData.street_name || ''
+          }));
+        }
+      } catch (error) {
+        console.log('ERF lookup failed:', error);
+        // Don't show error to user unless it's a critical error
+      }
+    }
   };
 
   const handleMapErfSelect = (erfNumber, streetAddress) => {
@@ -187,14 +221,22 @@ const RegisterForm = ({ onSwitchToLogin }) => {
             <div className="space-y-2">
               <Label htmlFor="erf_number">Erf Number</Label>
               <div className="flex gap-2">
-                <Input
-                  id="erf_number"
-                  name="erf_number"
-                  value={formData.erf_number}
-                  onChange={handleChange}
-                  placeholder="e.g. 123"
-                  required
-                />
+                <div className="relative flex-1">
+                  <Input
+                    id="erf_number"
+                    name="erf_number"
+                    value={formData.erf_number}
+                    onChange={handleErfChange}
+                    placeholder="e.g. 123"
+                    required
+                    disabled={erfLoading}
+                  />
+                  {erfLoading && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                    </div>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="outline"
@@ -206,9 +248,15 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                   Find on Map
                 </Button>
               </div>
-              <p className="text-xs text-gray-500">
-                Click "Find on Map" to locate your property on the Altona Village map
-              </p>
+              <div className="text-xs text-gray-500 space-y-1">
+                <p>Enter your ERF number - address fields will auto-fill if available</p>
+                <p>Or click "Find on Map" to locate your property on the Altona Village map</p>
+              </div>
+              {erfError && (
+                <p className="text-xs text-amber-600">
+                  Address lookup failed - please enter address manually
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
