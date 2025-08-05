@@ -356,7 +356,7 @@ const AdminTransitionLinking = () => {
                         <span className="font-medium">{pair.transition.current_role}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-gray-600">Expected New Type:</span>
+                        <span className="text-gray-600">Future Residency Status:</span>
                         <span className="font-medium">{pair.transition.new_occupant_type || 'Not specified'}</span>
                       </div>
                       <div className="flex justify-between">

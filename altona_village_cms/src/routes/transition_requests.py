@@ -480,7 +480,7 @@ def create_transition_request():
         data = request.get_json()
         
         # Validate required fields
-        required_fields = ['erf_number', 'request_type', 'current_role']
+        required_fields = ['erf_number', 'request_type', 'current_role', 'new_occupant_type']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'error': f'Missing required field: {field}'}), 400
@@ -489,6 +489,11 @@ def create_transition_request():
         valid_request_types = ['owner_sale', 'tenant_moveout', 'owner_moving', 'other']
         if data['request_type'] not in valid_request_types:
             return jsonify({'error': 'Invalid request type'}), 400
+        
+        # Validate new occupant type (future residency status)
+        valid_occupant_types = ['resident', 'owner', 'owner_resident']
+        if data['new_occupant_type'] not in valid_occupant_types:
+            return jsonify({'error': 'Invalid future residency status'}), 400
         
         # Validate current role
         valid_roles = ['owner', 'tenant', 'owner_resident']

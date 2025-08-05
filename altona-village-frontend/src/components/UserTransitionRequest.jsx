@@ -16,6 +16,7 @@ const UserTransitionRequest = () => {
   const [formData, setFormData] = useState({
     erf_number: '',
     request_type: '',
+    new_occupant_type: '', // Future residency status
     current_role: '',
     intended_moveout_date: null,
     property_transfer_date: null,
@@ -432,6 +433,23 @@ const UserTransitionRequest = () => {
                       <SelectItem value="other">Other - Please specify</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="new_occupant_type">Future Residency Status *</Label>
+                  <Select value={formData.new_occupant_type} onValueChange={(value) => handleInputChange('new_occupant_type', value)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select new occupant type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="resident">Resident Only (Tenant/Renter)</SelectItem>
+                      <SelectItem value="owner">Owner Only (Property Owner)</SelectItem>
+                      <SelectItem value="owner_resident">Owner-Resident (Owner who lives there)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    🎯 What type of access should the new occupant have?
+                  </p>
                 </div>
               </div>
 
