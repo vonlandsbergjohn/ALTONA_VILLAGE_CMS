@@ -53,8 +53,7 @@ const UserTransitionRequest = () => {
     community_violations: false,
     outstanding_matters_other: '',
     
-    // New occupant info
-    new_occupant_type: '',
+    // New occupant info - removed duplicate new_occupant_type field
     new_occupant_first_name: '',
     new_occupant_last_name: '',
     new_occupant_phone: '',
@@ -179,6 +178,7 @@ const UserTransitionRequest = () => {
   };
 
   const handleInputChange = (field, value) => {
+    console.log('handleInputChange called:', field, value); // Debug log
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -518,26 +518,6 @@ const UserTransitionRequest = () => {
                   </div>
                 </div>
               )}
-
-              {/* Expected New Occupant Type - for admin reference only */}
-              {(formData.request_type === 'owner_sale' || formData.request_type === 'owner_moving') && (
-                <div>
-                  <Label htmlFor="new_occupant_type">Expected New Occupant Type</Label>
-                  <Select value={formData.new_occupant_type} onValueChange={(value) => handleInputChange('new_occupant_type', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select expected type (for admin reference)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="new_owner">New Owner (purchase/inheritance)</SelectItem>
-                      <SelectItem value="new_tenant">New Tenant (rental)</SelectItem>
-                      <SelectItem value="owner_resident">Owner moving in</SelectItem>
-                      <SelectItem value="unknown">Unknown at this time</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">This helps admin prepare for the type of transition. The new occupant will provide their own details during registration.</p>
-                </div>
-              )}
-            </div>
 
             {/* Conditional sections based on request type */}
             {formData.request_type === 'owner_sale' && (
