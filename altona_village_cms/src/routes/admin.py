@@ -1,9 +1,12 @@
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import text
-from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, db
+from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, ErfAddressMapping, db
 from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
+import pandas as pd
+import io
+import csv
 import csv
 import io
 import os
@@ -2002,4 +2005,267 @@ def get_system_status():
             'error': str(e),
             'timestamp': datetime.now().isoformat()
         }), 500
+
+# ERF Address Mapping Routes
+@admin_bp.route('/address-mappings', methods=['GET'])
+@jwt_required()
+def get_address_mappings():
+    """Get all ERF address mappings"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        mappings = ErfAddressMapping.query.order_by(ErfAddressMapping.erf_number.cast(db.Integer)).all()
+        return jsonify({
+            'success': True,
+            'data': [mapping.to_dict() for mapping in mappings],
+            'count': len(mappings)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/address-mappings/upload', methods=['POST'])
+@jwt_required()
+def upload_address_mappings():
+    """Upload and process ERF address mappings from CSV file"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        if not file.filename.lower().endswith(('.csv', '.xlsx')):
+            return jsonify({'error': 'File must be CSV or Excel format'}), 400
+        
+        current_user_id = get_jwt_identity()
+        
+        # Read file content
+        try:
+            if file.filename.lower().endswith('.csv'):
+                # Read CSV file
+                content = file.read().decode('utf-8')
+                df = pd.read_csv(io.StringIO(content))
+            else:
+                # Read Excel file
+                df = pd.read_excel(file)
+        except Exception as e:
+            return jsonify({'error': f'Failed to read file: {str(e)}'}), 400
+        
+        # Validate required columns
+        required_columns = ['erf_number', 'street_number', 'street_name']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            return jsonify({
+                'error': f'Missing required columns: {", ".join(missing_columns)}',
+                'required_columns': required_columns,
+                'found_columns': list(df.columns)
+            }), 400
+        
+        # Process and validate data
+        address_data = []
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                erf_number = str(row['erf_number']).strip()
+                street_number = str(row['street_number']).strip()
+                street_name = str(row['street_name']).strip()
+                
+                # Validate required fields
+                if not erf_number or erf_number.lower() in ['nan', 'none', '']:
+                    errors.append(f"Row {index + 2}: ERF number is required")
+                    continue
+                
+                if not street_number or street_number.lower() in ['nan', 'none', '']:
+                    errors.append(f"Row {index + 2}: Street number is required")
+                    continue
+                
+                if not street_name or street_name.lower() in ['nan', 'none', '']:
+                    errors.append(f"Row {index + 2}: Street name is required")
+                    continue
+                
+                # Create full address
+                full_address = f"{street_number} {street_name}"
+                
+                # Optional fields
+                suburb = str(row.get('suburb', '')).strip() if 'suburb' in row and pd.notna(row.get('suburb')) else ''
+                postal_code = str(row.get('postal_code', '')).strip() if 'postal_code' in row and pd.notna(row.get('postal_code')) else ''
+                
+                if suburb:
+                    full_address += f", {suburb}"
+                if postal_code:
+                    full_address += f", {postal_code}"
+                
+                address_data.append({
+                    'erf_number': erf_number,
+                    'street_number': street_number,
+                    'street_name': street_name,
+                    'full_address': full_address,
+                    'suburb': suburb,
+                    'postal_code': postal_code
+                })
+                
+            except Exception as e:
+                errors.append(f"Row {index + 2}: {str(e)}")
+        
+        if errors:
+            return jsonify({
+                'error': 'Data validation failed',
+                'errors': errors[:10],  # Limit to first 10 errors
+                'total_errors': len(errors)
+            }), 400
+        
+        if not address_data:
+            return jsonify({'error': 'No valid data found in file'}), 400
+        
+        # Import data
+        success, message = ErfAddressMapping.bulk_import_addresses(address_data, current_user_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': message,
+                'imported_count': len(address_data)
+            }), 200
+        else:
+            return jsonify({'error': message}), 500
+            
+    except Exception as e:
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+@admin_bp.route('/address-mappings/lookup/<erf_number>', methods=['GET'])
+@jwt_required()
+def lookup_address_by_erf(erf_number):
+    """Get address details for a specific ERF number"""
+    try:
+        address_data = ErfAddressMapping.get_address_by_erf(erf_number)
+        
+        if address_data:
+            return jsonify({
+                'success': True,
+                'data': address_data
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': f'No address found for ERF {erf_number}'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/address-mappings/template', methods=['GET'])
+@jwt_required()
+def download_address_template():
+    """Download CSV template for address mappings"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Create CSV template
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'erf_number',
+            'street_number', 
+            'street_name',
+            'suburb',
+            'postal_code'
+        ])
+        
+        # Write sample data
+        writer.writerow([
+            '12345',
+            '123',
+            'Main Street',
+            'Altona Village',
+            '0001'
+        ])
+        writer.writerow([
+            '12346',
+            '125',
+            'Main Street',
+            'Altona Village',
+            '0001'
+        ])
+        writer.writerow([
+            '12347',
+            '1',
+            'Oak Avenue',
+            'Altona Village',
+            '0001'
+        ])
+        
+        # Generate response
+        output.seek(0)
+        csv_content = output.getvalue()
+        output.close()
+        
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': 'attachment; filename=erf_address_template.csv',
+                'Content-Type': 'text/csv; charset=utf-8'
+            }
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to generate template: {str(e)}'}), 500
+
+@admin_bp.route('/address-mappings/<int:mapping_id>', methods=['DELETE'])
+@jwt_required()
+def delete_address_mapping(mapping_id):
+    """Delete a specific address mapping"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        mapping = ErfAddressMapping.query.get(mapping_id)
+        if not mapping:
+            return jsonify({'error': 'Address mapping not found'}), 404
+        
+        db.session.delete(mapping)
+        db.session.commit()
+        
+        return jsonify({'message': 'Address mapping deleted successfully'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@admin_bp.route('/address-mappings/clear', methods=['DELETE'])
+@jwt_required()
+def clear_all_address_mappings():
+    """Clear all address mappings"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        count = ErfAddressMapping.query.count()
+        ErfAddressMapping.query.delete()
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Successfully cleared {count} address mappings'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 

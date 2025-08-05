@@ -758,3 +758,69 @@ class GateAccessLog(db.Model):
             'notes': self.notes,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+class ErfAddressMapping(db.Model):
+    """Model for storing ERF number to street address mappings"""
+    __tablename__ = 'erf_address_mappings'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    erf_number = db.Column(db.String(10), unique=True, nullable=False, index=True)
+    street_number = db.Column(db.String(10), nullable=False)
+    street_name = db.Column(db.String(100), nullable=False)
+    full_address = db.Column(db.String(255), nullable=False)
+    
+    # Optional additional fields
+    suburb = db.Column(db.String(100))
+    postal_code = db.Column(db.String(10))
+    
+    # Upload tracking
+    uploaded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    uploaded_by = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    
+    # Relationship
+    uploader = db.relationship('User', backref='erf_mappings_uploaded')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'erf_number': self.erf_number,
+            'street_number': self.street_number,
+            'street_name': self.street_name,
+            'full_address': self.full_address,
+            'suburb': self.suburb,
+            'postal_code': self.postal_code,
+            'uploaded_at': self.uploaded_at.isoformat() if self.uploaded_at else None
+        }
+    
+    @staticmethod
+    def get_address_by_erf(erf_number):
+        """Get address details for a given ERF number"""
+        mapping = ErfAddressMapping.query.filter_by(erf_number=str(erf_number)).first()
+        return mapping.to_dict() if mapping else None
+    
+    @staticmethod
+    def bulk_import_addresses(address_data, uploaded_by_id):
+        """Bulk import address mappings from uploaded data"""
+        try:
+            # Clear existing mappings
+            ErfAddressMapping.query.delete()
+            
+            # Add new mappings
+            for data in address_data:
+                mapping = ErfAddressMapping(
+                    erf_number=str(data['erf_number']).strip(),
+                    street_number=str(data['street_number']).strip(),
+                    street_name=str(data['street_name']).strip(),
+                    full_address=str(data['full_address']).strip(),
+                    suburb=str(data.get('suburb', '')).strip() or None,
+                    postal_code=str(data.get('postal_code', '')).strip() or None,
+                    uploaded_by=uploaded_by_id
+                )
+                db.session.add(mapping)
+            
+            db.session.commit()
+            return True, f"Successfully imported {len(address_data)} address mappings"
+        except Exception as e:
+            db.session.rollback()
+            return False, f"Import failed: {str(e)}"

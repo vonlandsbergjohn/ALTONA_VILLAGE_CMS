@@ -16,7 +16,8 @@ import {
   Clock,
   Bell,
   ArrowRightLeft,
-  Link
+  Link,
+  MapPin
 } from 'lucide-react';
 
 const Layout = ({ children }) => {
@@ -33,6 +34,7 @@ const Layout = ({ children }) => {
     { icon: Link, label: 'Transition Linking', path: '/admin/transition-linking' },
     { icon: Clock, label: 'Pending Approvals', path: '/admin/pending' },
     { icon: Bell, label: 'System Notifications', path: '/admin/notifications' },
+    { icon: MapPin, label: 'Address Mappings', path: '/admin/address-mappings' },
     { icon: Settings, label: 'Communication', path: '/admin/communication' },
   ];
 

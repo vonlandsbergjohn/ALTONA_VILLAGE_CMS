@@ -10,6 +10,7 @@ import AdminResidents from '@/components/AdminResidents';
 import AdminNotificationsDashboard from '@/components/AdminNotificationsDashboard';
 import AdminTransitionRequests from '@/components/AdminTransitionRequests';
 import AdminTransitionLinking from '@/components/AdminTransitionLinking';
+import AddressMappings from '@/components/AddressMappings';
 import GateRegister from '@/components/GateRegister';
 import PendingRegistrations from './components/PendingRegistrations';
 import ResidentDashboard from '@/components/ResidentDashboard';
@@ -110,6 +111,8 @@ const Router = () => {
           return <PendingRegistrations />;
         case '/admin/notifications':
           return <AdminNotificationsDashboard />;
+        case '/admin/address-mappings':
+          return <AddressMappings />;
         case '/admin/communication':
           return <div>Communication Tools (Coming Soon)</div>;
         default:
