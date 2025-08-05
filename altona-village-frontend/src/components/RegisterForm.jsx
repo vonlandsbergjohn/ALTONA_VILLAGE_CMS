@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/lib/auth.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
 
   const { register } = useAuth();
   const { lookupAddress, loading: erfLoading, error: erfError, clearError } = useAddressAutoFill();
+  const erfTimeoutRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -44,10 +45,10 @@ const RegisterForm = ({ onSwitchToLogin }) => {
   };
 
   // Handle ERF number change with autofill
-  const handleErfChange = async (e) => {
+  const handleErfChange = (e) => {
     const erfNumber = e.target.value;
     
-    // Update the ERF number in form data
+    // Update the ERF number in form data immediately
     setFormData(prev => ({
       ...prev,
       erf_number: erfNumber
@@ -56,22 +57,29 @@ const RegisterForm = ({ onSwitchToLogin }) => {
     // Clear any previous ERF lookup errors
     clearError();
 
-    // Attempt autofill if ERF number has enough digits
+    // Clear previous timeout
+    if (erfTimeoutRef.current) {
+      clearTimeout(erfTimeoutRef.current);
+    }
+
+    // Attempt autofill if ERF number has enough digits (debounced)
     if (erfNumber && erfNumber.trim().length >= 2) {
-      try {
-        const addressData = await lookupAddress(erfNumber);
-        if (addressData) {
-          // Auto-fill the address fields
-          setFormData(prev => ({
-            ...prev,
-            street_number: addressData.street_number || '',
-            street_name: addressData.street_name || ''
-          }));
+      erfTimeoutRef.current = setTimeout(async () => {
+        try {
+          const addressData = await lookupAddress(erfNumber);
+          if (addressData) {
+            // Auto-fill the address fields
+            setFormData(prev => ({
+              ...prev,
+              street_number: addressData.street_number || '',
+              street_name: addressData.street_name || ''
+            }));
+          }
+        } catch (error) {
+          console.log('ERF lookup failed:', error);
+          // Don't show error to user unless it's a critical error
         }
-      } catch (error) {
-        console.log('ERF lookup failed:', error);
-        // Don't show error to user unless it's a critical error
-      }
+      }, 500); // 500ms delay to allow user to finish typing
     }
   };
 

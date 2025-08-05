@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 // Custom hook for ERF address auto-fill functionality
 export const useAddressAutoFill = () => {
@@ -85,15 +85,25 @@ export const ErfInputWithAutoFill = ({
   ...props 
 }) => {
   const { lookupAddress, loading } = useAddressAutoFill();
+  const timeoutRef = useRef(null);
 
-  const handleErfChange = async (erfNumber) => {
+  const handleErfChange = (e) => {
+    const erfNumber = e.target.value;
     onChange(erfNumber);
     
+    // Clear previous timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+    
+    // Set new timeout for lookup (debounced)
     if (erfNumber && erfNumber.trim().length >= 3) {
-      const addressData = await lookupAddress(erfNumber);
-      if (addressData && onAddressFound) {
-        onAddressFound(addressData);
-      }
+      timeoutRef.current = setTimeout(async () => {
+        const addressData = await lookupAddress(erfNumber);
+        if (addressData && onAddressFound) {
+          onAddressFound(addressData);
+        }
+      }, 500); // 500ms delay to allow user to finish typing
     }
   };
 
@@ -102,7 +112,7 @@ export const ErfInputWithAutoFill = ({
       <input
         type="text"
         value={value}
-        onChange={(e) => handleErfChange(e.target.value)}
+        onChange={handleErfChange}
         disabled={disabled || loading}
         placeholder={placeholder}
         className={`${className} ${loading ? 'opacity-50' : ''}`}
