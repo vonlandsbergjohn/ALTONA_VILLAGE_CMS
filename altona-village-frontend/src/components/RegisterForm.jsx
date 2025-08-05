@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useAuth } from '@/lib/auth.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,7 +34,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
 
   const { register } = useAuth();
   const { lookupAddress, loading: erfLoading, error: erfError, clearError } = useAddressAutoFill();
-  const erfTimeoutRef = useRef(null);
+  const erfInputRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -44,44 +44,57 @@ const RegisterForm = ({ onSwitchToLogin }) => {
     }));
   };
 
-  // Handle ERF number change with autofill
-  const handleErfChange = (e) => {
-    const erfNumber = e.target.value;
-    
-    // Update the ERF number in form data immediately
-    setFormData(prev => ({
-      ...prev,
-      erf_number: erfNumber
-    }));
-
-    // Clear any previous ERF lookup errors
-    clearError();
-
-    // Clear previous timeout
-    if (erfTimeoutRef.current) {
-      clearTimeout(erfTimeoutRef.current);
-    }
-
-    // Attempt autofill if ERF number has enough digits (debounced)
+  // Handle ERF autofill (isolated from form state)
+  const performErfLookup = useCallback(async (erfNumber) => {
     if (erfNumber && erfNumber.trim().length >= 2) {
-      erfTimeoutRef.current = setTimeout(async () => {
-        try {
-          const addressData = await lookupAddress(erfNumber);
-          if (addressData) {
-            // Auto-fill the address fields
-            setFormData(prev => ({
-              ...prev,
-              street_number: addressData.street_number || '',
-              street_name: addressData.street_name || ''
-            }));
-          }
-        } catch (error) {
-          console.log('ERF lookup failed:', error);
-          // Don't show error to user unless it's a critical error
+      try {
+        const addressData = await lookupAddress(erfNumber);
+        if (addressData) {
+          // Auto-fill the address fields
+          setFormData(prev => ({
+            ...prev,
+            street_number: addressData.street_number || '',
+            street_name: addressData.street_name || ''
+          }));
         }
-      }, 500); // 500ms delay to allow user to finish typing
+      } catch (error) {
+        console.log('ERF lookup failed:', error);
+      }
     }
-  };
+  }, [lookupAddress]);
+
+  // ERF input handler - only trigger lookup on blur or Enter key
+  const handleErfChange = useCallback((e) => {
+    // Just clear any lookup errors, don't trigger lookup
+    clearError();
+  }, [clearError]);
+
+  // Handle ERF lookup on blur (when user finishes typing)
+  const handleErfBlur = useCallback((e) => {
+    const erfNumber = e.target.value.trim();
+    if (erfNumber && erfNumber.length >= 1) {
+      performErfLookup(erfNumber);
+    }
+  }, [performErfLookup]);
+
+  // Handle ERF lookup on Enter key
+  const handleErfKeyDown = useCallback((e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const erfNumber = e.target.value.trim();
+      if (erfNumber && erfNumber.length >= 1) {
+        performErfLookup(erfNumber);
+      }
+    }
+  }, [performErfLookup]);  // Sync ERF input value to form data before submit
+  const syncErfToFormData = useCallback(() => {
+    if (erfInputRef.current) {
+      setFormData(prev => ({
+        ...prev,
+        erf_number: erfInputRef.current.value
+      }));
+    }
+  }, []);
 
   const handleMapErfSelect = (erfNumber, streetAddress) => {
     // Parse street address to get street number and name
@@ -103,6 +116,9 @@ const RegisterForm = ({ onSwitchToLogin }) => {
     setLoading(true);
     setError('');
 
+    // Get current ERF value directly from input
+    const currentErfValue = erfInputRef.current?.value || '';
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
@@ -121,6 +137,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
     
     const finalSubmitData = {
       ...submitData,
+      erf_number: currentErfValue,
       address: combinedAddress
     };
 
@@ -231,11 +248,14 @@ const RegisterForm = ({ onSwitchToLogin }) => {
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
+                    ref={erfInputRef}
                     id="erf_number"
                     name="erf_number"
-                    value={formData.erf_number}
+                    defaultValue={formData.erf_number}
                     onChange={handleErfChange}
-                    placeholder="e.g. 123"
+                    onBlur={handleErfBlur}
+                    onKeyDown={handleErfKeyDown}
+                    placeholder="e.g. 123 (Press Enter or click away to populate address)"
                     autoComplete="off"
                     required
                     disabled={erfLoading}
@@ -258,7 +278,7 @@ const RegisterForm = ({ onSwitchToLogin }) => {
                 </Button>
               </div>
               <div className="text-xs text-gray-500 space-y-1">
-                <p>Enter your ERF number - address fields will auto-fill if available</p>
+                <p>Enter your ERF number, then press Enter or click away to populate address fields</p>
                 <p>Or click "Find on Map" to locate your property on the Altona Village map</p>
               </div>
               {erfError && (

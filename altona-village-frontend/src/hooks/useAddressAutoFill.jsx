@@ -87,7 +87,7 @@ export const ErfInputWithAutoFill = ({
   const { lookupAddress, loading } = useAddressAutoFill();
   const timeoutRef = useRef(null);
 
-  const handleErfChange = (e) => {
+  const handleErfChange = useCallback((e) => {
     const erfNumber = e.target.value;
     onChange(erfNumber);
     
@@ -105,7 +105,7 @@ export const ErfInputWithAutoFill = ({
         }
       }, 500); // 500ms delay to allow user to finish typing
     }
-  };
+  }, [onChange, onAddressFound, lookupAddress]);
 
   return (
     <div className="relative">
