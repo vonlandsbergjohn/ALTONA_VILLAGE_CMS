@@ -518,6 +518,7 @@ const UserTransitionRequest = () => {
                   </div>
                 </div>
               )}
+            </div>
 
             {/* Conditional sections based on request type */}
             {formData.request_type === 'owner_sale' && (
