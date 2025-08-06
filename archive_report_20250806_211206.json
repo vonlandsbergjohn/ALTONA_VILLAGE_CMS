@@ -1,0 +1,21 @@
+{
+    "generated_at": "2025-08-06T21:12:06.518744",
+    "recent_archives_30_days": 1,
+    "pending_archive_actions": 1,
+    "recent_archives": [
+        {
+            "email": "johanvonlandsberg080808@gmai.com",
+            "user_type": "owner_only",
+            "archived_date": "2025-08-06T21:10:53.145326",
+            "reason": "y"
+        }
+    ],
+    "pending_actions": [
+        {
+            "email": "johanvonlandsberg080808@gmai.com",
+            "user_type": "owner_only",
+            "recommended_action": "archive_with_limited_retention",
+            "can_auto_archive": true
+        }
+    ]
+}

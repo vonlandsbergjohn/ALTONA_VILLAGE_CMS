@@ -187,6 +187,7 @@ def get_all_residents():
                 'user_id': user.id,
                 'email': user.email,
                 'status': user.status,
+                'archived': user.archived if hasattr(user, 'archived') else False,
                 'created_at': user.created_at.isoformat() if user.created_at else None,
                 'is_resident': user.resident is not None,
                 'is_owner': user.owner is not None,

@@ -347,7 +347,12 @@ const UserTransitionRequest = () => {
   const DatePicker = ({ value, onChange, placeholder }) => (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="w-full justify-start text-left font-normal">
+        <Button 
+          variant="outline" 
+          className="w-full justify-start text-left font-normal"
+          aria-label={placeholder || "Select date"}
+          title={placeholder || "Select date"}
+        >
           <CalendarIcon className="mr-2 h-4 w-4" />
           {value ? format(value, 'PPP') : <span>{placeholder}</span>}
         </Button>
@@ -934,10 +939,21 @@ const UserTransitionRequest = () => {
 
             {/* Submit Button */}
             <div className="flex justify-end space-x-4 pt-6">
-              <Button type="button" variant="outline" onClick={() => window.history.back()}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => window.history.back()}
+                aria-label="Cancel transition request"
+                title="Cancel and go back to previous page"
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading}>
+              <Button 
+                type="submit" 
+                disabled={loading}
+                aria-label={loading ? 'Submitting transition request...' : 'Submit transition request'}
+                title={loading ? 'Please wait while submitting...' : 'Submit your transition request'}
+              >
                 {loading ? 'Submitting...' : 'Submit Transition Request'}
               </Button>
             </div>

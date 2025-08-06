@@ -21,6 +21,7 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  Archive,
   Filter,
   X,
   KeyRound,
@@ -35,7 +36,7 @@ const AdminResidents = () => {
   const [filteredResidents, setFilteredResidents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState('all'); // all, residents, owners, both
+  const [filterType, setFilterType] = useState('all'); // all, residents, owners, both, archived
   const [selectedResident, setSelectedResident] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -93,14 +94,17 @@ const AdminResidents = () => {
       filtered = filtered.filter(resident => {
         const isResident = resident.is_resident;
         const isOwner = resident.is_owner;
+        const isArchived = resident.status === 'archived' || resident.archived === true;
         
         switch (filterType) {
           case 'residents':
-            return isResident && !isOwner;
+            return isResident && !isOwner && !isArchived;
           case 'owners':
-            return isOwner && !isResident;
+            return isOwner && !isResident && !isArchived;
           case 'both':
-            return isResident && isOwner;
+            return isResident && isOwner && !isArchived;
+          case 'archived':
+            return isArchived;
           default:
             return true;
         }
@@ -214,13 +218,15 @@ const AdminResidents = () => {
     const colors = {
       'active': 'bg-green-100 text-green-800',
       'pending': 'bg-yellow-100 text-yellow-800',
-      'suspended': 'bg-red-100 text-red-800'
+      'suspended': 'bg-red-100 text-red-800',
+      'archived': 'bg-gray-100 text-gray-800'
     };
     
     const icons = {
       'active': CheckCircle,
       'pending': Clock,
-      'suspended': AlertCircle
+      'suspended': AlertCircle,
+      'archived': Archive
     };
     
     const Icon = icons[status] || AlertCircle;
@@ -364,6 +370,7 @@ const AdminResidents = () => {
                 <option value="residents">Residents Only</option>
                 <option value="owners">Owners Only</option>
                 <option value="both">Owner-Residents</option>
+                <option value="archived">Archived</option>
               </select>
             </div>
             <Button 
@@ -383,7 +390,13 @@ const AdminResidents = () => {
                 <span> matching "{searchTerm}"</span>
               )}
               {filterType !== 'all' && (
-                <span> filtered by {filterType.replace('_', '-')}</span>
+                <span> filtered by {
+                  filterType === 'both' ? 'owner-residents' : 
+                  filterType === 'residents' ? 'residents only' :
+                  filterType === 'owners' ? 'owners only' :
+                  filterType === 'archived' ? 'archived users' :
+                  filterType
+                }</span>
               )}
             </div>
           )}
@@ -392,8 +405,15 @@ const AdminResidents = () => {
 
       {/* Residents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredResidents.map((resident) => (
-          <Card key={resident.id || resident.user_id} className="hover:shadow-lg transition-shadow">
+        {filteredResidents.map((resident) => {
+          const isArchived = resident.status === 'archived' || resident.archived === true;
+          return (
+          <Card 
+            key={resident.id || resident.user_id} 
+            className={`hover:shadow-lg transition-shadow ${
+              isArchived ? 'opacity-75 bg-gray-50 border-gray-300' : ''
+            }`}
+          >
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="flex items-center space-x-3">
@@ -414,8 +434,11 @@ const AdminResidents = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => handleEditResidentWithVehicles(resident)}
+                  disabled={isArchived}
+                  className={isArchived ? 'opacity-50 cursor-not-allowed' : ''}
                 >
                   <Edit className="w-4 h-4" />
+                  {isArchived && <span className="ml-1 text-xs">(Archived)</span>}
                 </Button>
               </div>
             </CardHeader>
@@ -454,7 +477,8 @@ const AdminResidents = () => {
               </div>
             </CardContent>
           </Card>
-        ))}
+          );
+        })}
       </div>
 
       {filteredResidents.length === 0 && !loading && (

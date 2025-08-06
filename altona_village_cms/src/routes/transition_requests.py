@@ -7,7 +7,7 @@ Following the same pattern as the complaint system
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.user import db, User, Resident, Owner, UserTransitionRequest, TransitionRequestUpdate, TransitionVehicle, Vehicle
-from ..utils.logging import log_user_change
+from ..routes.admin_notifications import log_user_change
 from datetime import datetime, date
 import uuid
 
@@ -885,14 +885,26 @@ def update_transition_request_status(request_id):
             )
             
             if is_termination:
-                # Handle termination/exit - deactivate user and remove from gate register
-                termination_result = handle_user_termination(transition_request)
-                if not termination_result['success']:
-                    current_app.logger.error(f"User termination failed: {termination_result['error']}")
-                    return jsonify({'error': f'Termination failed: {termination_result["error"]}'}), 500
-                
-                # Mark migration as completed for terminations
-                transition_request.migration_completed = True
+                # For termination requests, only terminate if no linking has been completed
+                if not transition_request.migration_completed:
+                    # Check if there's a pending user that could be linked
+                    pending_user = find_pending_user_for_erf(transition_request.erf_number)
+                    
+                    if pending_user:
+                        # There's a pending user - don't terminate yet, must use linking interface
+                        return jsonify({
+                            'error': f'Found pending user for ERF {transition_request.erf_number}. Please use the Transition Linking interface to complete this transition instead of marking as completed directly.'
+                        }), 400
+                    else:
+                        # No pending user found - safe to terminate
+                        termination_result = handle_user_termination(transition_request)
+                        if not termination_result['success']:
+                            current_app.logger.error(f"User termination failed: {termination_result['error']}")
+                            return jsonify({'error': f'Termination failed: {termination_result["error"]}'}), 500
+                        
+                        # Mark migration as completed for terminations
+                        transition_request.migration_completed = True
+                # If already migration_completed, just update the status (linking was already done)
                 
             elif is_privacy_compliant:
                 # Privacy-compliant transitions must be completed via the linking interface
@@ -1505,32 +1517,47 @@ def handle_user_termination(transition_request):
         
         # Deactivate the user
         user.status = 'inactive'
-        user.is_active = False
         
         # Deactivate resident record if exists
         if user.resident:
             user.resident.status = 'inactive'
-            user.resident.is_active = False
+            user.resident.migration_date = datetime.utcnow()
+            user.resident.migration_reason = f'User terminated from ERF {erf_number}'
         
         # Deactivate owner record if exists  
         if user.owner:
             user.owner.status = 'inactive'
-            user.owner.is_active = False
+            user.owner.migration_date = datetime.utcnow()
+            user.owner.migration_reason = f'User terminated from ERF {erf_number}'
         
         # Remove from gate register by deactivating user access
         # The gate register is generated from active users, so deactivating 
         # the user will automatically remove them from the gate register
         
         # Deactivate user vehicles
-        vehicles = Vehicle.query.filter_by(user_id=user.id).all()
+        vehicles = []
+        if user.resident:
+            vehicles.extend(Vehicle.query.filter_by(resident_id=user.resident.id).all())
+        if user.owner:
+            vehicles.extend(Vehicle.query.filter_by(owner_id=user.owner.id).all())
+            
         for vehicle in vehicles:
-            vehicle.is_active = False
             vehicle.status = 'terminated'
+            vehicle.migration_date = datetime.utcnow()
+            vehicle.migration_reason = f'User terminated from ERF {erf_number}'
         
         # Log the termination
+        user_name = "Unknown User"
+        if user.resident:
+            user_name = f"{user.resident.first_name} {user.resident.last_name}"
+        elif user.owner:
+            user_name = f"{user.owner.first_name} {user.owner.last_name}"
+        elif hasattr(user, 'full_name') and user.full_name:
+            user_name = user.full_name
+        
         log_user_change(
             user.id, 
-            f"{user.first_name} {user.last_name}" if hasattr(user, 'first_name') else user.full_name,
+            user_name,
             erf_number,
             'transition_termination',
             'user_status',
@@ -1564,3 +1591,139 @@ def handle_user_termination(transition_request):
         db.session.rollback()
         current_app.logger.error(f"Error handling user termination: {str(e)}")
         return {'success': False, 'error': f'Termination failed: {str(e)}'}
+
+
+def find_pending_user_for_erf(erf_number):
+    """
+    Find a pending user registration for the specified ERF number.
+    This is used to check if there's a new occupant waiting to be linked.
+    """
+    try:
+        # Look for pending users who have registered for this ERF
+        # Use simpler queries to avoid join issues
+        
+        # Check pending residents
+        residents = Resident.query.filter_by(erf_number=erf_number).all()
+        for resident in residents:
+            if resident.user and resident.user.status == 'pending':
+                return resident.user
+        
+        # Check pending owners
+        owners = Owner.query.filter_by(erf_number=erf_number).all()
+        for owner in owners:
+            if owner.user and owner.user.status == 'pending':
+                return owner.user
+        
+        return None
+        
+    except Exception as e:
+        current_app.logger.error(f"Error finding pending user for ERF {erf_number}: {str(e)}")
+        return None
+
+
+def handle_transition_linking(transition_request, new_user):
+    """
+    Handle the linking of a transition request with a new user.
+    This activates the new user and deactivates the old user.
+    
+    ⚠️ IMPORTANT: This function should only be called from the dedicated
+    Transition Linking interface, not from the status update endpoint.
+    """
+    try:
+        old_user = User.query.get(transition_request.user_id)
+        if not old_user:
+            return {'success': False, 'error': 'Old user not found'}
+        
+        erf_number = transition_request.erf_number
+        
+        # Step 1: Activate the new user (this is the key step - new user goes from pending to active)
+        new_user.status = 'active'
+        
+        # Step 2: Deactivate the old user (remove from gate register)
+        old_user.status = 'inactive'
+        
+        # Step 3: Update old user's records as migrated (not deleted)
+        migration_reason = f'Transitioned to new occupant {new_user.email} via transition {transition_request.id}'
+        
+        if old_user.resident:
+            old_user.resident.status = 'migrated'
+            old_user.resident.migration_date = datetime.utcnow()
+            old_user.resident.migration_reason = migration_reason
+        
+        if old_user.owner:
+            old_user.owner.status = 'migrated'
+            old_user.owner.migration_date = datetime.utcnow()
+            old_user.owner.migration_reason = migration_reason
+        
+        # Step 4: Transfer or deactivate vehicles (remove from old user's gate access)
+        vehicles = []
+        if old_user.resident:
+            vehicles.extend(Vehicle.query.filter_by(resident_id=old_user.resident.id).all())
+        if old_user.owner:
+            vehicles.extend(Vehicle.query.filter_by(owner_id=old_user.owner.id).all())
+            
+        for vehicle in vehicles:
+            vehicle.status = 'transferred'
+            vehicle.migration_date = datetime.utcnow()
+            vehicle.migration_reason = f'Owner transitioned from {old_user.email} to {new_user.email}'
+        
+        # Step 5: Log the transition
+        old_user_name = "Unknown User"
+        if old_user.resident:
+            old_user_name = f"{old_user.resident.first_name} {old_user.resident.last_name}"
+        elif old_user.owner:
+            old_user_name = f"{old_user.owner.first_name} {old_user.owner.last_name}"
+        
+        new_user_name = "Unknown User"
+        if new_user.resident:
+            new_user_name = f"{new_user.resident.first_name} {new_user.resident.last_name}"
+        elif new_user.owner:
+            new_user_name = f"{new_user.owner.first_name} {new_user.owner.last_name}"
+        
+        log_user_change(
+            new_user.id, 
+            new_user_name,
+            erf_number,
+            'transition_linking',
+            'user_status',
+            'pending',
+            'active'
+        )
+        
+        log_user_change(
+            old_user.id, 
+            old_user_name,
+            erf_number,
+            'transition_linking',
+            'user_status',
+            'active',
+            'inactive'
+        )
+        
+        # Step 6: Mark the transition request as migration completed
+        transition_request.migration_completed = True
+        transition_request.migration_date = datetime.utcnow()
+        
+        # Step 7: Add update record
+        update = TransitionRequestUpdate(
+            transition_request_id=transition_request.id,
+            user_id=transition_request.user_id,
+            update_text=f"Transition linking completed: {old_user_name} replaced by {new_user_name} for ERF {erf_number}. Old user removed from gate register, new user activated.",
+            update_type='linking_completed'
+        )
+        
+        db.session.add(update)
+        db.session.commit()
+        
+        return {
+            'success': True, 
+            'message': f'Transition linking completed: {old_user_name} → {new_user_name} for ERF {erf_number}. New user activated and added to gate register.',
+            'old_user_id': old_user.id,
+            'new_user_id': new_user.id,
+            'erf_number': erf_number
+        }
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error handling transition linking: {str(e)}")
+        return {'success': False, 'error': f'Linking failed: {str(e)}'}

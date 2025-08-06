@@ -20,6 +20,12 @@ class User(db.Model):
     rejection_email_sent = db.Column(db.Boolean, default=False)
     rejection_email_sent_at = db.Column(db.DateTime)
     
+    # Archiving and deletion tracking
+    archived = db.Column(db.Boolean, default=False)
+    archived_at = db.Column(db.DateTime)
+    archived_by = db.Column(db.String(36))  # User ID of admin who archived
+    archive_reason = db.Column(db.Text)  # Reason for archiving
+    
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -71,6 +77,10 @@ class User(db.Model):
             'approval_email_sent_at': self.approval_email_sent_at.isoformat() if self.approval_email_sent_at else None,
             'rejection_email_sent': self.rejection_email_sent,
             'rejection_email_sent_at': self.rejection_email_sent_at.isoformat() if self.rejection_email_sent_at else None,
+            'archived': self.archived,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'archived_by': self.archived_by,
+            'archive_reason': self.archive_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }

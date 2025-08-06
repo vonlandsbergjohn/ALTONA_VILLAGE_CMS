@@ -270,13 +270,13 @@ const AdminTransitionRequests = () => {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'completed':
-        return <CheckCircle className="h-4 w-4 text-green-600" />;
+        return <CheckCircle className="h-4 w-4 text-green-600" aria-label="Completed status" />;
       case 'cancelled':
-        return <X className="h-4 w-4 text-red-600" />;
+        return <X className="h-4 w-4 text-red-600" aria-label="Cancelled status" />;
       case 'in_progress':
-        return <Clock className="h-4 w-4 text-blue-600" />;
+        return <Clock className="h-4 w-4 text-blue-600" aria-label="In progress status" />;
       default:
-        return <AlertCircle className="h-4 w-4 text-yellow-600" />;
+        return <AlertCircle className="h-4 w-4 text-yellow-600" aria-label="Pending status" />;
     }
   };
 
@@ -415,15 +415,15 @@ const AdminTransitionRequests = () => {
               <CardContent>
                 <div className="grid md:grid-cols-3 gap-4 mb-4">
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <CalendarIcon className="h-4 w-4" />
+                    <CalendarIcon className="h-4 w-4" aria-label="Move-out date" />
                     <span>Move-out: {formatDate(request.intended_moveout_date)}</span>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <UserIcon className="h-4 w-4" />
+                    <UserIcon className="h-4 w-4" aria-label="User role" />
                     <span>Role: {request.current_role?.replace('_', ' ')}</span>
                   </div>
                   <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <ClockIcon className="h-4 w-4" />
+                    <ClockIcon className="h-4 w-4" aria-label="Last updated time" />
                     <span>Last updated: {format(new Date(request.updated_at), 'PPp')}</span>
                   </div>
                 </div>
@@ -580,7 +580,7 @@ const AdminTransitionRequests = () => {
                                     <div key={update.id} className="border rounded p-3">
                                       <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center space-x-2">
-                                          <MessageSquareIcon className="h-4 w-4 text-gray-400" />
+                                          <MessageSquareIcon className="h-4 w-4 text-gray-400" aria-label="Message update" />
                                           <Badge variant="outline" size="sm">
                                             {update.update_type}
                                           </Badge>
@@ -612,7 +612,7 @@ const AdminTransitionRequests = () => {
                                   {selectedRequest.vehicles.map((vehicle) => (
                                     <div key={vehicle.id} className="border rounded p-3">
                                       <div className="flex items-center space-x-2 mb-2">
-                                        <CarIcon className="h-4 w-4 text-gray-400" />
+                                        <CarIcon className="h-4 w-4 text-gray-400" aria-label="Vehicle information" />
                                         <span className="font-medium">{vehicle.license_plate}</span>
                                       </div>
                                       <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">

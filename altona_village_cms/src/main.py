@@ -16,6 +16,7 @@ from src.routes.gate_register import gate_register_bp
 from src.routes.admin_notifications import admin_notifications
 from src.routes.transition_requests import transition_bp
 from src.routes.public import public_bp
+from src.routes.user_management import user_management_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
@@ -41,6 +42,7 @@ app.register_blueprint(gate_register_bp, url_prefix='/api/admin')
 app.register_blueprint(admin_notifications, url_prefix='/api')
 app.register_blueprint(transition_bp, url_prefix='/api/transition')
 app.register_blueprint(public_bp, url_prefix='/api/public')
+app.register_blueprint(user_management_bp, url_prefix='/api')
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
