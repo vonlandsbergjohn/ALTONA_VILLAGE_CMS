@@ -305,6 +305,74 @@ const AdminResidents = () => {
     }
   };
 
+  // Permanent user deletion function
+  const handlePermanentDeleteUser = async (resident) => {
+    // First confirmation
+    const isConfirmed = window.confirm(
+      `⚠️ PERMANENT DELETION WARNING\n\n` +
+      `This will permanently delete ${resident.email} and ALL their data including:\n` +
+      `• User account\n` +
+      `• Resident/Owner profiles\n` +
+      `• All vehicles\n` +
+      `• All complaints\n` +
+      `• All related records\n\n` +
+      `This action CANNOT be undone!\n\n` +
+      `Are you absolutely sure you want to continue?`
+    );
+
+    if (!isConfirmed) return;
+
+    // Second confirmation - require typing DELETE
+    const deleteConfirmation = window.prompt(
+      `To confirm this permanent deletion, type "DELETE" (case sensitive):`
+    );
+
+    if (deleteConfirmation !== "DELETE") {
+      alert("Deletion cancelled - confirmation text does not match");
+      return;
+    }
+
+    // Get deletion reason
+    const deletionReason = window.prompt(
+      `Please provide a reason for deleting ${resident.email}:\n\n` +
+      `Examples:\n` +
+      `• Incorrectly approved registration\n` +
+      `• Mistaken registration\n` +
+      `• Test account\n` +
+      `• Not a valid resident/owner`
+    );
+
+    if (!deletionReason || deletionReason.trim() === "") {
+      alert("Deletion cancelled - reason is required");
+      return;
+    }
+
+    setUpdateLoading(true);
+    try {
+      const result = await adminAPI.permanentlyDeleteUser(resident.user_id, {
+        deletion_reason: deletionReason.trim(),
+        confirm_deletion: true
+      });
+
+      setMessage({ 
+        type: 'success', 
+        text: `User ${resident.email} has been permanently deleted. Deletion ID: ${result.data.deletion_id}` 
+      });
+
+      // Reload residents list to reflect the deletion
+      await loadResidents();
+
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.error || 'Failed to delete user permanently' 
+      });
+    } finally {
+      setUpdateLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -430,16 +498,28 @@ const AdminResidents = () => {
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleEditResidentWithVehicles(resident)}
-                  disabled={isArchived}
-                  className={isArchived ? 'opacity-50 cursor-not-allowed' : ''}
-                >
-                  <Edit className="w-4 h-4" />
-                  {isArchived && <span className="ml-1 text-xs">(Archived)</span>}
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleEditResidentWithVehicles(resident)}
+                    disabled={isArchived || updateLoading}
+                    className={isArchived ? 'opacity-50 cursor-not-allowed' : ''}
+                  >
+                    <Edit className="w-4 h-4" />
+                    {isArchived && <span className="ml-1 text-xs">(Archived)</span>}
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handlePermanentDeleteUser(resident)}
+                    disabled={updateLoading}
+                    className="bg-red-600 hover:bg-red-700"
+                    title="Permanently delete user - WARNING: Cannot be undone!"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-3">

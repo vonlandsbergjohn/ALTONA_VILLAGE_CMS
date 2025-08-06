@@ -17,6 +17,14 @@ class UserArchiveDeletionSystem:
         else:
             self.db_path = db_path
     
+    def _table_exists(self, cursor, table_name):
+        """Check if a table exists in the database."""
+        cursor.execute("""
+            SELECT name FROM sqlite_master 
+            WHERE type='table' AND name=?
+        """, (table_name,))
+        return cursor.fetchone() is not None
+    
     def get_connection(self):
         """Get database connection"""
         if not os.path.exists(self.db_path):
@@ -442,6 +450,320 @@ class UserArchiveDeletionSystem:
         
         conn.close()
         return len(old_archives) if old_archives else 0
+
+    def permanently_delete_user(self, user_id, deletion_reason, performed_by_admin_id, confirm_deletion=False):
+        """
+        Permanently delete a user from the system completely.
+        This is for cases where users were incorrectly approved or registered by mistake.
+        
+        WARNING: This is a PERMANENT deletion that cannot be undone!
+        Use this only for incorrect registrations, not for regular user lifecycle management.
+        """
+        if not confirm_deletion:
+            print("⚠️  WARNING: This will PERMANENTLY delete all user data!")
+            print("   This action cannot be undone and should only be used for:")
+            print("   - Incorrectly approved registrations")
+            print("   - Mistaken registrations")
+            print("   - Users who should never have been in the system")
+            print("   ")
+            print("   To confirm deletion, call this function with confirm_deletion=True")
+            return False
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # First, get complete user information for logging
+            cursor.execute("""
+                SELECT u.id, u.email, u.role, u.status, u.created_at,
+                       r.first_name as resident_first, r.last_name as resident_last, 
+                       r.erf_number as resident_erf, r.phone_number as resident_phone,
+                       o.first_name as owner_first, o.last_name as owner_last,
+                       o.erf_number as owner_erf, o.phone_number as owner_phone
+                FROM users u
+                LEFT JOIN residents r ON u.id = r.user_id
+                LEFT JOIN owners o ON u.id = o.user_id
+                WHERE u.id = ?
+            """, (user_id,))
+            
+            user_data = cursor.fetchone()
+            if not user_data:
+                raise ValueError(f"User {user_id} not found")
+            
+            user_email = user_data[1]
+            user_role = user_data[2]
+            resident_name = f"{user_data[5]} {user_data[6]}" if user_data[5] else None
+            owner_name = f"{user_data[9]} {user_data[10]}" if user_data[9] else None
+            
+            print(f"🗑️ PERMANENTLY DELETING USER: {user_email}")
+            print(f"   Role: {user_role}")
+            if resident_name:
+                print(f"   Resident: {resident_name} (ERF {user_data[7]})")
+            if owner_name:
+                print(f"   Owner: {owner_name} (ERF {user_data[11]})")
+            print(f"   Reason: {deletion_reason}")
+            
+            # Create deletion log before removing data
+            deletion_record = self._create_deletion_log(cursor, user_id, user_data, deletion_reason, performed_by_admin_id)
+            
+            # Get counts for reporting
+            deletion_summary = self._get_user_data_counts(cursor, user_id)
+            
+            # Step 1: Delete all related data in correct order (foreign keys)
+            print("   🗑️ Deleting related data...")
+            
+            # Delete complaint updates first (references complaints)
+            cursor.execute("""
+                DELETE FROM complaint_updates 
+                WHERE complaint_id IN (SELECT id FROM complaints WHERE resident_id = ?)
+            """, (user_id,))
+            complaint_updates_deleted = cursor.rowcount
+            
+            # Delete complaints
+            cursor.execute("DELETE FROM complaints WHERE resident_id = ?", (user_id,))
+            complaints_deleted = cursor.rowcount
+            
+            # Delete vehicles
+            cursor.execute("DELETE FROM vehicles WHERE resident_id = ? OR owner_id = ?", (user_id, user_id))
+            vehicles_deleted = cursor.rowcount
+            
+            # Delete transition requests
+            cursor.execute("DELETE FROM user_transition_requests WHERE user_id = ?", (user_id,))
+            transitions_deleted = cursor.rowcount
+            
+            # Delete any pending registrations (if table exists)
+            pending_deleted = 0
+            if self._table_exists(cursor, 'pending_registrations'):
+                cursor.execute("DELETE FROM pending_registrations WHERE email = ?", (user_email,))
+                pending_deleted = cursor.rowcount
+            
+            # Delete password reset tokens (if table exists)
+            tokens_deleted = 0
+            if self._table_exists(cursor, 'password_reset_tokens'):
+                cursor.execute("DELETE FROM password_reset_tokens WHERE user_id = ?", (user_id,))
+                tokens_deleted = cursor.rowcount
+            
+            # Delete user sessions (if table exists)
+            sessions_deleted = 0
+            if self._table_exists(cursor, 'user_sessions'):
+                cursor.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+                sessions_deleted = cursor.rowcount
+            
+            # Step 2: Delete profile records
+            print("   🗑️ Deleting profile records...")
+            
+            # Delete resident record
+            cursor.execute("DELETE FROM residents WHERE user_id = ?", (user_id,))
+            resident_deleted = cursor.rowcount > 0
+            
+            # Delete owner record
+            cursor.execute("DELETE FROM owners WHERE user_id = ?", (user_id,))
+            owner_deleted = cursor.rowcount > 0
+            
+            # Step 3: Delete user record itself
+            print("   🗑️ Deleting user account...")
+            cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            user_deleted = cursor.rowcount > 0
+            
+            if not user_deleted:
+                raise ValueError("Failed to delete user record")
+            
+            # Commit all deletions
+            conn.commit()
+            
+            # Report deletion summary
+            print(f"   ✅ USER PERMANENTLY DELETED: {user_email}")
+            print(f"      📧 User account: Deleted")
+            if resident_deleted:
+                print(f"      🏠 Resident profile: Deleted")
+            if owner_deleted:
+                print(f"      🏡 Owner profile: Deleted")
+            print(f"      🚗 Vehicles: {vehicles_deleted} deleted")
+            print(f"      📋 Complaints: {complaints_deleted} deleted")
+            print(f"      💬 Complaint updates: {complaint_updates_deleted} deleted")
+            print(f"      🔄 Transition requests: {transitions_deleted} deleted")
+            print(f"      ⏳ Pending registrations: {pending_deleted} deleted")
+            print(f"      🔑 Password tokens: {tokens_deleted} deleted")
+            print(f"      🖥️ User sessions: {sessions_deleted} deleted")
+            print(f"      📝 Deletion logged: {deletion_record['deletion_id']}")
+            
+            return {
+                'success': True,
+                'user_email': user_email,
+                'deletion_id': deletion_record['deletion_id'],
+                'summary': {
+                    'user_deleted': user_deleted,
+                    'resident_deleted': resident_deleted,
+                    'owner_deleted': owner_deleted,
+                    'vehicles_deleted': vehicles_deleted,
+                    'complaints_deleted': complaints_deleted,
+                    'complaint_updates_deleted': complaint_updates_deleted,
+                    'transitions_deleted': transitions_deleted,
+                    'pending_deleted': pending_deleted,
+                    'tokens_deleted': tokens_deleted,
+                    'sessions_deleted': sessions_deleted
+                }
+            }
+            
+        except Exception as e:
+            conn.rollback()
+            print(f"   ❌ Error during permanent deletion: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+        finally:
+            conn.close()
+    
+    def _create_deletion_log(self, cursor, user_id, user_data, deletion_reason, performed_by_admin_id):
+        """Create a log record of the permanent deletion for audit purposes"""
+        
+        deletion_record = {
+            'deletion_id': str(uuid.uuid4()),
+            'user_id': user_id,
+            'deleted_at': datetime.now().isoformat(),
+            'deleted_by': performed_by_admin_id,
+            'deletion_reason': deletion_reason,
+            'deletion_type': 'permanent_admin_deletion',
+            'original_user_data': {
+                'email': user_data[1],
+                'role': user_data[2],
+                'status': user_data[3],
+                'created_at': user_data[4],
+                'resident_name': f"{user_data[5]} {user_data[6]}" if user_data[5] else None,
+                'resident_erf': user_data[7],
+                'owner_name': f"{user_data[9]} {user_data[10]}" if user_data[9] else None,
+                'owner_erf': user_data[11]
+            }
+        }
+        
+        # Create deletion log table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_deletion_log (
+                id VARCHAR(36) PRIMARY KEY,
+                user_id VARCHAR(36),
+                deleted_at DATETIME,
+                deleted_by VARCHAR(36),
+                deletion_reason TEXT,
+                deletion_type VARCHAR(100),
+                original_data TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        cursor.execute("""
+            INSERT INTO user_deletion_log (id, user_id, deleted_at, deleted_by, deletion_reason, deletion_type, original_data)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            deletion_record['deletion_id'],
+            user_id,
+            deletion_record['deleted_at'],
+            performed_by_admin_id,
+            deletion_reason,
+            deletion_record['deletion_type'],
+            json.dumps(deletion_record)
+        ))
+        
+        return deletion_record
+    
+    def _get_user_data_counts(self, cursor, user_id):
+        """Get counts of all related data for reporting"""
+        counts = {}
+        
+        # Count vehicles
+        cursor.execute("SELECT COUNT(*) FROM vehicles WHERE resident_id = ? OR owner_id = ?", (user_id, user_id))
+        counts['vehicles'] = cursor.fetchone()[0]
+        
+        # Count complaints
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE resident_id = ?", (user_id,))
+        counts['complaints'] = cursor.fetchone()[0]
+        
+        # Count transition requests
+        cursor.execute("SELECT COUNT(*) FROM user_transition_requests WHERE user_id = ?", (user_id,))
+        counts['transitions'] = cursor.fetchone()[0]
+        
+        return counts
+    
+    def get_deletion_logs(self, days_back=30):
+        """Get recent deletion logs for audit purposes"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cutoff_date = datetime.now() - timedelta(days=days_back)
+        
+        cursor.execute("""
+            SELECT id, user_id, deleted_at, deleted_by, deletion_reason, deletion_type, original_data
+            FROM user_deletion_log
+            WHERE deleted_at >= ?
+            ORDER BY deleted_at DESC
+        """, (cutoff_date.isoformat(),))
+        
+        deletion_logs = cursor.fetchall()
+        conn.close()
+        
+        return deletion_logs
+    
+    def verify_user_completely_deleted(self, user_email):
+        """Verify that a user has been completely removed from all tables"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        print(f"🔍 Verifying complete deletion of: {user_email}")
+        
+        # Check all tables that might contain user data
+        tables_to_check = [
+            ('users', 'email'),
+            ('residents', 'user_id'),
+            ('owners', 'user_id'),
+            ('vehicles', 'resident_id'),
+            ('vehicles', 'owner_id'),
+            ('complaints', 'resident_id'),
+            ('user_transition_requests', 'user_id'),
+            ('pending_registrations', 'email'),
+            ('password_reset_tokens', 'user_id'),
+            ('user_sessions', 'user_id')
+        ]
+        
+        found_data = []
+        
+        for table, column in tables_to_check:
+            # Check if table exists before querying
+            if not self._table_exists(cursor, table):
+                print(f"   ⚠️ Table '{table}' does not exist, skipping verification")
+                continue
+                
+            try:
+                if column == 'email':
+                    cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (user_email,))
+                else:
+                    # For user_id columns, we need to first get the user_id from email
+                    cursor.execute("SELECT id FROM users WHERE email = ?", (user_email,))
+                    user_result = cursor.fetchone()
+                    if user_result:
+                        user_id = user_result[0]
+                        cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (user_id,))
+                    else:
+                        # User doesn't exist, so count will be 0
+                        cursor.execute(f"SELECT 0")
+                
+                count = cursor.fetchone()[0]
+                if count > 0:
+                    found_data.append((table, column, count))
+                    print(f"   ❌ Found {count} records in {table}.{column}")
+                else:
+                    print(f"   ✅ No records in {table}.{column}")
+                    
+            except sqlite3.OperationalError as e:
+                print(f"   ⚠️ Could not check {table}.{column}: {e}")
+        
+        conn.close()
+        
+        if found_data:
+            print(f"   ❌ DELETION INCOMPLETE: Found data in {len(found_data)} locations")
+            return False
+        else:
+            print(f"   ✅ DELETION VERIFIED: No traces of {user_email} found")
+            return True
 
 def main():
     """Main function to demonstrate the archive system"""

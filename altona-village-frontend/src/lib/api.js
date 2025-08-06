@@ -86,6 +86,9 @@ export const adminAPI = {
   deleteResidentVehicle: (userId, vehicleId) => api.delete(`/admin/residents/${userId}/vehicles/${vehicleId}`),
   getResidentEmails: () => api.get('/admin/communication/emails'),
   getResidentPhones: () => api.get('/admin/communication/phones'),
+  // User Management
+  permanentlyDeleteUser: (userId, data) => api.delete(`/admin/users/${userId}/permanent-delete`, { data }),
+  getDeletionLogs: (daysBack = 30) => api.get(`/admin/users/deletion-logs?days_back=${daysBack}`),
 };
 
 // Resident API

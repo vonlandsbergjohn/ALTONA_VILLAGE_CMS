@@ -2351,3 +2351,145 @@ def clear_all_address_mappings():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@admin_bp.route('/users/<user_id>/permanent-delete', methods=['DELETE'])
+@jwt_required()
+def permanently_delete_user(user_id):
+    """
+    Permanently delete a user from the system completely.
+    This is for cases where users were incorrectly approved or registered by mistake.
+    WARNING: This is a PERMANENT deletion that cannot be undone!
+    """
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        print(f"DEBUG: Starting deletion for user_id: {user_id}")
+        
+        data = request.get_json()
+        print(f"DEBUG: Request data: {data}")
+        
+        deletion_reason = data.get('deletion_reason', '').strip()
+        confirm_deletion = data.get('confirm_deletion', False)
+        
+        print(f"DEBUG: deletion_reason: {deletion_reason}, confirm_deletion: {confirm_deletion}")
+        
+        if not deletion_reason:
+            return jsonify({'error': 'Deletion reason is required'}), 400
+        
+        if not confirm_deletion:
+            return jsonify({
+                'error': 'Deletion confirmation required',
+                'message': 'This is a permanent deletion that cannot be undone. Set confirm_deletion to true to proceed.'
+            }), 400
+        
+        # Get current admin user
+        current_admin_id = get_jwt_identity()
+        print(f"DEBUG: current_admin_id: {current_admin_id}")
+        
+        # Import and use the deletion system
+        print("DEBUG: Importing UserArchiveDeletionSystem")
+        from user_archive_deletion_system import UserArchiveDeletionSystem
+        
+        print("DEBUG: Creating deletion system instance")
+        deletion_system = UserArchiveDeletionSystem()
+        
+        # Get user details before deletion for response
+        print(f"DEBUG: Looking up user with ID: {user_id}")
+        user = User.query.get(user_id)
+        if not user:
+            print(f"DEBUG: User not found with ID: {user_id}")
+            return jsonify({'error': 'User not found'}), 404
+        
+        user_email = user.email
+        print(f"DEBUG: Found user: {user_email}")
+        
+        # Perform permanent deletion
+        print("DEBUG: Starting permanent deletion")
+        result = deletion_system.permanently_delete_user(
+            user_id=user_id,
+            deletion_reason=deletion_reason,
+            performed_by_admin_id=current_admin_id,
+            confirm_deletion=True
+        )
+        
+        print(f"DEBUG: Deletion result: {result}")
+        
+        if result['success']:
+            print("DEBUG: Deletion successful, logging admin action")
+            # Log the admin action
+            log_user_change(
+                user_id=user_id,
+                user_name=user_email,
+                erf_number='N/A',  # User being deleted, ERF not relevant
+                change_type='PERMANENT_DELETE',
+                field_name='user_account',
+                old_value=user_email,
+                new_value='DELETED'
+            )
+            
+            print("DEBUG: Returning success response")
+            return jsonify({
+                'message': f'User {user_email} has been permanently deleted',
+                'deletion_id': result['deletion_id'],
+                'summary': result['summary']
+            }), 200
+        else:
+            print(f"DEBUG: Deletion failed: {result}")
+            return jsonify({
+                'error': 'Failed to delete user',
+                'details': result.get('error', 'Unknown error')
+            }), 500
+            
+    except Exception as e:
+        print(f"DEBUG: Exception occurred: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error during deletion: {str(e)}'}), 500
+
+@admin_bp.route('/users/deletion-logs', methods=['GET'])
+@jwt_required()
+def get_deletion_logs():
+    """Get recent user deletion logs for audit purposes"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        days_back = request.args.get('days_back', 30, type=int)
+        
+        # Import deletion system
+        from user_archive_deletion_system import UserArchiveDeletionSystem
+        
+        deletion_system = UserArchiveDeletionSystem()
+        logs = deletion_system.get_deletion_logs(days_back=days_back)
+        
+        # Format logs for frontend
+        formatted_logs = []
+        for log in logs:
+            import json
+            deletion_id, user_id, deleted_at, deleted_by, reason, deletion_type, original_data = log
+            original = json.loads(original_data)
+            
+            formatted_logs.append({
+                'deletion_id': deletion_id,
+                'user_id': user_id,
+                'deleted_at': deleted_at,
+                'deleted_by': deleted_by,
+                'deletion_reason': reason,
+                'deletion_type': deletion_type,
+                'user_email': original['original_user_data']['email'],
+                'user_role': original['original_user_data']['role'],
+                'resident_name': original['original_user_data']['resident_name'],
+                'owner_name': original['original_user_data']['owner_name']
+            })
+        
+        return jsonify({
+            'logs': formatted_logs,
+            'total': len(formatted_logs),
+            'days_back': days_back
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
