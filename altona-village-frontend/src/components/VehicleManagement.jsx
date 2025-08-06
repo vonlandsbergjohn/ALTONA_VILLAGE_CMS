@@ -29,6 +29,8 @@ const VehicleManagement = () => {
   });
 
   useEffect(() => {
+    // Clear any existing error messages when component loads
+    setMessage({ type: '', text: '' });
     fetchVehicles();
     fetchUserProfile();
   }, []);
@@ -46,8 +48,14 @@ const VehicleManagement = () => {
     try {
       const response = await residentAPI.getMyVehicles();
       setVehicles(response.data);
+      // Clear any error messages on successful load
+      setMessage({ type: '', text: '' });
     } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to load vehicles' });
+      console.error('Error loading vehicles:', error);
+      // Only show error if we're not just initializing (user hasn't interacted yet)
+      if (!loading) {
+        setMessage({ type: 'error', text: 'Failed to load vehicles' });
+      }
     } finally {
       setLoading(false);
     }
@@ -64,6 +72,8 @@ const VehicleManagement = () => {
       erf_selection: userProfile?.erfs?.length === 1 ? userProfile.erfs[0].user_id : '' // Auto-select if single ERF
     });
     setEditingVehicle(null);
+    // Clear any existing error messages when opening the form
+    setMessage({ type: '', text: '' });
   };
 
   const handleSubmit = async (e) => {
@@ -179,7 +189,13 @@ const VehicleManagement = () => {
           <h1 className="text-3xl font-bold text-gray-900">Vehicle Management</h1>
           <p className="text-gray-600">Manage your registered vehicles for gate access</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog open={isDialogOpen} onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          // Clear error messages when dialog opens
+          if (open) {
+            setMessage({ type: '', text: '' });
+          }
+        }}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>
               <Plus className="w-4 h-4 mr-2" />
