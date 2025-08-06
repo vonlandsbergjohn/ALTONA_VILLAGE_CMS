@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { User, Mail, Phone, Shield, Calendar, MapPin, KeyRound } from 'lucide-react';
+import { User, Mail, Phone, Shield, Calendar, MapPin, KeyRound, Home, Building2, ExternalLink } from 'lucide-react';
 
 const ProfileManagement = () => {
   const { user, updateProfile: updateUserProfile, refreshUser } = useAuth();
@@ -22,7 +22,9 @@ const ProfileManagement = () => {
     property_address: '',
     tenant_or_owner: '',
     intercom_code: '',
-    erf_number: ''
+    erf_number: '',
+    total_erfs: 0,
+    erfs: []
   });
   const [passwords, setPasswords] = useState({
     current_password: '',
@@ -129,6 +131,32 @@ const ProfileManagement = () => {
     }
   };
 
+  const getTypeColor = (type) => {
+    switch (type) {
+      case 'owner': return 'bg-blue-100 text-blue-800';
+      case 'resident': return 'bg-green-100 text-green-800';
+      case 'owner-resident': return 'bg-purple-100 text-purple-800';
+      case 'unknown': return 'bg-gray-100 text-gray-600';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getTypeIcon = (type) => {
+    switch (type) {
+      case 'owner': return <Building2 className="w-3 h-3" />;
+      case 'resident': return <Home className="w-3 h-3" />;
+      case 'owner-resident': return <Building2 className="w-3 h-3" />;
+      case 'unknown': return <User className="w-3 h-3" />;
+      default: return <Home className="w-3 h-3" />;
+    }
+  };
+
+  const handleErfTransitionRequest = (erfNumber, userId) => {
+    // This will link to the transition request page for the specific ERF
+    // The userId parameter ensures the transition is linked to the correct account
+    window.location.href = `/transition-requests?erf=${erfNumber}&user_id=${userId}`;
+  };
+
   const getRoleColor = (role) => {
     // Get the actual residency type for coloring
     const residencyType = getUserResidencyType(user);
@@ -178,8 +206,9 @@ const ProfileManagement = () => {
       )}
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="profile">Personal Information</TabsTrigger>
+          <TabsTrigger value="properties">My Properties ({profile.total_erfs || 0})</TabsTrigger>
           <TabsTrigger value="security">Security Settings</TabsTrigger>
         </TabsList>
 
@@ -270,7 +299,7 @@ const ProfileManagement = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="erf_number">ERF Number</Label>
+                    <Label htmlFor="erf_number">Primary ERF Number</Label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                       <Input
@@ -284,6 +313,11 @@ const ProfileManagement = () => {
                     </div>
                     <p className="text-xs text-gray-500">
                       ℹ️ Primary property identifier - managed by administration
+                      {profile.total_erfs > 1 && (
+                        <span className="text-blue-600">
+                          <br />📍 You have {profile.total_erfs} total properties - view all in "My Properties" tab
+                        </span>
+                      )}
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -341,6 +375,151 @@ const ProfileManagement = () => {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="properties" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Building2 className="w-5 h-5 mr-2" />
+                My Properties ({profile.total_erfs || 0} ERF{(profile.total_erfs || 0) !== 1 ? 's' : ''})
+              </CardTitle>
+              <CardDescription>
+                View and manage all properties associated with your account
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {profile.erfs && profile.erfs.length > 0 ? (
+                <div className="grid gap-4">
+                  {profile.erfs.map((erf, index) => (
+                    <Card key={`${erf.user_id}-${erf.erf_number}`} className={`border-l-4 ${
+                      erf.is_current_account 
+                        ? 'border-l-blue-500 bg-blue-50' 
+                        : erf.status === 'active' 
+                          ? 'border-l-green-500' 
+                          : 'border-l-yellow-500'
+                    }`}>
+                      <CardContent className="pt-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <h3 className="text-lg font-semibold">ERF {erf.erf_number || 'Unknown'}</h3>
+                              <Badge className={getTypeColor(erf.type)}>
+                                {getTypeIcon(erf.type)}
+                                <span className="ml-1">{(erf.type || 'Unknown').replace('-', ' ').toUpperCase()}</span>
+                              </Badge>
+                              <Badge className={getStatusColor(erf.status)}>
+                                {(erf.status || 'Unknown').toUpperCase()}
+                              </Badge>
+                              {erf.is_current_account && (
+                                <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                                  Current Session
+                                </Badge>
+                              )}
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <Label className="text-gray-500">Property Address</Label>
+                                <p className="flex items-center">
+                                  <MapPin className="w-4 h-4 mr-1 text-gray-400" />
+                                  {erf.full_address || 'Address not available'}
+                                </p>
+                              </div>
+                              
+                              <div>
+                                <Label className="text-gray-500">Street Address</Label>
+                                <p>{erf.street_number && erf.street_name 
+                                  ? `${erf.street_number} ${erf.street_name}` 
+                                  : 'Not specified'}
+                                </p>
+                              </div>
+
+                              <div>
+                                <Label className="text-gray-500">Owner/Resident</Label>
+                                <p>{erf.full_name || 'Name not available'}</p>
+                              </div>
+
+                              <div>
+                                <Label className="text-gray-500">Intercom Code</Label>
+                                <p className="flex items-center">
+                                  <KeyRound className="w-4 h-4 mr-1 text-gray-400" />
+                                  {erf.intercom_code || 'Not available'}
+                                </p>
+                              </div>
+
+                              {erf.phone_number && (
+                                <div>
+                                  <Label className="text-gray-500">Phone</Label>
+                                  <p className="flex items-center">
+                                    <Phone className="w-4 h-4 mr-1 text-gray-400" />
+                                    {erf.phone_number}
+                                  </p>
+                                </div>
+                              )}
+
+                              {erf.title_deed_number && (
+                                <div>
+                                  <Label className="text-gray-500">Title Deed</Label>
+                                  <p>{erf.title_deed_number}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {(erf.emergency_contact_name || erf.emergency_contact_number) && (
+                              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                                <Label className="text-gray-500 text-sm font-medium">Emergency Contact</Label>
+                                <div className="text-sm">
+                                  {erf.emergency_contact_name && <p>Name: {erf.emergency_contact_name}</p>}
+                                  {erf.emergency_contact_number && (
+                                    <p className="flex items-center">
+                                      <Phone className="w-3 h-3 mr-1" />
+                                      {erf.emergency_contact_number}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="ml-4 flex flex-col space-y-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(`/map?erf=${erf.erf_number}`, '_blank')}
+                              className="flex items-center"
+                            >
+                              <MapPin className="w-4 h-4 mr-1" />
+                              View on Map
+                              <ExternalLink className="w-3 h-3 ml-1" />
+                            </Button>
+                            
+                            {erf.status === 'active' && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleErfTransitionRequest(erf.erf_number, erf.user_id)}
+                                className="flex items-center"
+                              >
+                                <ExternalLink className="w-4 h-4 mr-1" />
+                                Transition Request
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-medium mb-2">No Properties Found</h3>
+                  <p>No ERF registrations found for your account.</p>
+                  <p className="text-sm mt-2">Contact admin if you believe this is an error.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

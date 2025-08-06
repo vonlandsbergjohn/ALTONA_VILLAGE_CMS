@@ -204,58 +204,110 @@ def profile():
     if not user:
         return jsonify({'error': 'User not found'}), 404
     
-    # Create profile data in the format frontend expects
+    # Find ALL users with the same email (for multi-ERF support)
+    all_user_accounts = User.query.filter_by(email=user.email).all()
+    
+    # Collect all ERF data for this email
+    erfs = []
+    primary_profile = None
+    
+    for account in all_user_accounts:
+        # Create ERF entry for this account
+        erf_data = {
+            'user_id': account.id,
+            'status': account.status,
+            'role': account.role,
+            'is_current_account': account.id == user.id,
+            'type': 'unknown',  # Default type to prevent undefined errors
+            'erf_number': 'Unknown',
+            'full_name': 'Unknown User',
+            'full_address': 'Address not available',
+            'intercom_code': 'Not available'
+        }
+        
+        # Add resident data if available
+        if account.resident:
+            resident = account.resident
+            erf_data.update({
+                'erf_number': resident.erf_number or 'Unknown',
+                'type': 'resident',
+                'full_name': f"{resident.first_name or ''} {resident.last_name or ''}".strip() or 'Unknown User',
+                'street_number': resident.street_number,
+                'street_name': resident.street_name,
+                'full_address': resident.full_address or 'Address not available',
+                'phone_number': resident.phone_number,
+                'emergency_contact_name': resident.emergency_contact_name,
+                'emergency_contact_number': resident.emergency_contact_number,
+                'intercom_code': resident.intercom_code or 'Not available',
+                'id_number': resident.id_number
+            })
+            
+            # Use first active account as primary profile
+            if not primary_profile and account.status == 'active':
+                primary_profile = erf_data.copy()
+        
+        # Add owner data if available
+        if account.owner:
+            owner = account.owner
+            owner_data = {
+                'erf_number': owner.erf_number or 'Unknown',
+                'type': 'owner',
+                'full_name': f"{owner.first_name or ''} {owner.last_name or ''}".strip() or 'Unknown User',
+                'street_number': owner.street_number,
+                'street_name': owner.street_name,
+                'full_address': owner.full_address or 'Address not available',
+                'phone_number': owner.phone_number,
+                'emergency_contact_name': owner.emergency_contact_name,
+                'emergency_contact_number': owner.emergency_contact_number,
+                'intercom_code': owner.intercom_code or 'Not available',
+                'id_number': owner.id_number,
+                'title_deed_number': owner.title_deed_number,
+                'full_postal_address': owner.full_postal_address
+            }
+            
+            # If this account has both resident and owner for same ERF, combine them
+            if account.resident and account.resident.erf_number == owner.erf_number:
+                erf_data['type'] = 'owner-resident'
+                erf_data.update(owner_data)  # Owner data takes precedence
+            else:
+                # Separate ERF for owner role
+                owner_erf = erf_data.copy()
+                owner_erf.update(owner_data)
+                erfs.append(owner_erf)
+                
+            # Use first active account as primary profile
+            if not primary_profile and account.status == 'active':
+                primary_profile = owner_data.copy()
+        
+        # Add this ERF to the list (if it has resident/owner data)
+        if account.resident or account.owner:
+            erfs.append(erf_data)
+    
+    # Use current account as fallback if no active account found
+    if not primary_profile and erfs:
+        primary_profile = next((erf for erf in erfs if erf['is_current_account']), erfs[0])
+    
+    # Create profile response
     profile_data = {
         'id': user.id,
         'email': user.email,
         'role': user.role,
         'status': user.status,
-        'is_resident': user.is_resident(),  # Add the flags
-        'is_owner': user.is_owner(),        # Add the flags
-        'is_owner_resident': user.is_owner_resident(),
-        'full_name': user.get_full_name() or '',
-        'phone': '',
-        'property_address': '',
-        'tenant_or_owner': '',
-        'emergency_contact_name': '',
-        'emergency_contact_phone': '',
-        'intercom_code': '',
-        'erf_number': '',
-        'resident': user.resident.to_dict() if user.resident else None,  # Include resident data
-        'owner': user.owner.to_dict() if user.owner else None  # Include owner data
+        'total_erfs': len(erfs),
+        'erfs': erfs,
+        # Legacy fields for backward compatibility (from primary/current account)
+        'full_name': primary_profile.get('full_name', '') if primary_profile else '',
+        'phone': primary_profile.get('phone_number', '') if primary_profile else '',
+        'property_address': primary_profile.get('full_address', '') if primary_profile else '',
+        'emergency_contact_name': primary_profile.get('emergency_contact_name', '') if primary_profile else '',
+        'emergency_contact_phone': primary_profile.get('emergency_contact_number', '') if primary_profile else '',
+        'intercom_code': primary_profile.get('intercom_code', '') if primary_profile else '',
+        'erf_number': primary_profile.get('erf_number', '') if primary_profile else '',
+        'tenant_or_owner': primary_profile.get('type', '') if primary_profile else '',
+        'is_resident': any(erf.get('type') in ['resident', 'owner-resident'] for erf in erfs),
+        'is_owner': any(erf.get('type') in ['owner', 'owner-resident'] for erf in erfs),
+        'is_owner_resident': any(erf.get('type') == 'owner-resident' for erf in erfs)
     }
-    
-    # Add resident data if available
-    if user.resident:
-        resident = user.resident
-        profile_data.update({
-            'phone': resident.phone_number or '',
-            'property_address': resident.full_address or '',
-            'emergency_contact_name': resident.emergency_contact_name or '',
-            'emergency_contact_phone': resident.emergency_contact_number or '',
-            'intercom_code': resident.intercom_code or '',
-            'erf_number': resident.erf_number or ''
-        })
-    
-    # Add owner data if available (overrides resident data for shared fields)
-    if user.owner:
-        owner = user.owner
-        profile_data.update({
-            'phone': owner.phone_number or profile_data['phone'],
-            'property_address': owner.full_address or profile_data['property_address'],
-            'emergency_contact_name': owner.emergency_contact_name or profile_data['emergency_contact_name'],
-            'emergency_contact_phone': owner.emergency_contact_number or profile_data['emergency_contact_phone'],
-            'intercom_code': owner.intercom_code or profile_data['intercom_code'],
-            'erf_number': owner.erf_number or profile_data['erf_number']
-        })
-    
-    # Determine tenant_or_owner status
-    if user.is_owner() and user.is_resident():
-        profile_data['tenant_or_owner'] = 'owner-resident'  # Show owner-resident when user has both
-    elif user.is_owner():
-        profile_data['tenant_or_owner'] = 'owner'
-    elif user.is_resident():
-        profile_data['tenant_or_owner'] = 'tenant'
     
     return jsonify(profile_data), 200
 
