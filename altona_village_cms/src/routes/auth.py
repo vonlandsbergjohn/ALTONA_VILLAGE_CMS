@@ -69,9 +69,8 @@ def register():
         if not (data.get('address') or (data.get('street_number') and data.get('street_name'))):
             return jsonify({'error': 'Address information is required (either address or street_number + street_name)'}), 400
         
-        # Check if user already exists
-        if User.query.filter_by(email=data['email']).first():
-            return jsonify({'error': 'Email already registered'}), 400
+        # Note: Allowing duplicate emails for multi-ERF registrations
+        # Admin approval process will validate property ownership/management rights
         
         # Create user
         user = User(
