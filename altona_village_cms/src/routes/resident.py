@@ -46,6 +46,7 @@ def get_my_vehicles():
         all_user_accounts = User.query.filter_by(email=current_user.email).all()
         
         vehicles = []
+        seen_vehicle_ids = set()  # Track vehicles to avoid duplicates
         
         # Get vehicles from all user accounts with this email
         for user_account in all_user_accounts:
@@ -53,23 +54,27 @@ def get_my_vehicles():
             if user_account.resident:
                 resident_vehicles = Vehicle.query.filter_by(resident_id=user_account.resident.id).all()
                 for vehicle in resident_vehicles:
-                    vehicle_dict = vehicle.to_dict()
-                    # Add ERF information
-                    vehicle_dict['erf_number'] = user_account.resident.erf_number
-                    vehicle_dict['property_address'] = user_account.resident.street_address or 'Address not available'
-                    vehicle_dict['user_id'] = user_account.id
-                    vehicles.append(vehicle_dict)
+                    if vehicle.id not in seen_vehicle_ids:
+                        vehicle_dict = vehicle.to_dict()
+                        # Add ERF information
+                        vehicle_dict['erf_number'] = user_account.resident.erf_number
+                        vehicle_dict['property_address'] = user_account.resident.full_address or 'Address not available'
+                        vehicle_dict['user_id'] = user_account.id
+                        vehicles.append(vehicle_dict)
+                        seen_vehicle_ids.add(vehicle.id)
             
             # Get vehicles for owners (including owner-only users)
             if user_account.owner:
                 owner_vehicles = Vehicle.query.filter_by(owner_id=user_account.owner.id).all()
                 for vehicle in owner_vehicles:
-                    vehicle_dict = vehicle.to_dict()
-                    # Add ERF information
-                    vehicle_dict['erf_number'] = user_account.owner.erf_number
-                    vehicle_dict['property_address'] = user_account.owner.street_address or 'Address not available'
-                    vehicle_dict['user_id'] = user_account.id
-                    vehicles.append(vehicle_dict)
+                    if vehicle.id not in seen_vehicle_ids:
+                        vehicle_dict = vehicle.to_dict()
+                        # Add ERF information
+                        vehicle_dict['erf_number'] = user_account.owner.erf_number
+                        vehicle_dict['property_address'] = user_account.owner.full_address or 'Address not available'
+                        vehicle_dict['user_id'] = user_account.id
+                        vehicles.append(vehicle_dict)
+                        seen_vehicle_ids.add(vehicle.id)
         
         return jsonify(vehicles), 200
         
