@@ -35,16 +35,32 @@ const ResidentDashboard = () => {
 
   const loadDashboardData = async () => {
     try {
+      // Load data individually to handle partial failures gracefully
+      const vehiclesPromise = residentAPI.getMyVehicles().catch(err => {
+        console.warn('Failed to load vehicles:', err);
+        return { data: [] };
+      });
+      
+      const complaintsPromise = residentAPI.getMyComplaints().catch(err => {
+        console.warn('Failed to load complaints:', err);
+        return { data: [] };
+      });
+      
+      const propertiesPromise = residentAPI.getMyProperties().catch(err => {
+        console.warn('Failed to load properties:', err);
+        return { data: [] };
+      });
+
       const [vehicles, complaints, properties] = await Promise.all([
-        residentAPI.getMyVehicles(),
-        residentAPI.getMyComplaints(),
-        residentAPI.getMyProperties()
+        vehiclesPromise,
+        complaintsPromise,
+        propertiesPromise
       ]);
 
       setData({
-        vehicles: vehicles.data,
-        complaints: complaints.data,
-        properties: properties.data
+        vehicles: vehicles.data || [],
+        complaints: complaints.data || [],
+        properties: properties.data || []
       });
     } catch (error) {
       console.error('Error loading dashboard data:', error);
