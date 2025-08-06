@@ -141,6 +141,8 @@ const Router = () => {
           return <MyTransitionRequests />;
         case '/resident/transition-request/new':
           return <UserTransitionRequest />;
+        case '/transition-requests':
+          return <UserTransitionRequest />;
         default:
           return <ResidentDashboard />;
       }

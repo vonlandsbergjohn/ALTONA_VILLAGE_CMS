@@ -100,10 +100,27 @@ const UserTransitionRequest = () => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [userInfo, setUserInfo] = useState(null);
+  const [availableErfs, setAvailableErfs] = useState([]);
 
   useEffect(() => {
     fetchUserInfo();
+    checkUrlParameters();
   }, []);
+
+  const checkUrlParameters = () => {
+    // Check if ERF number is passed via URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const erfFromUrl = urlParams.get('erf');
+    const userIdFromUrl = urlParams.get('user_id');
+    
+    if (erfFromUrl) {
+      console.log('ERF number from URL:', erfFromUrl);
+      setFormData(prev => ({
+        ...prev,
+        erf_number: erfFromUrl
+      }));
+    }
+  };
 
   const fetchUserInfo = async () => {
     try {
@@ -114,37 +131,91 @@ const UserTransitionRequest = () => {
       console.log('Profile data:', data);
       setUserInfo(data);
       
-      // Determine user role and populate form with existing data
-      const isResident = data.resident;
-      const isOwner = data.owner;
-      console.log('User roles - isResident:', isResident, 'isOwner:', isOwner);
+      // Handle both old and new data structures for properties
+      let userProperties = data.properties || [];
       
-      let currentRole = '';
-      
-      if (isResident && isOwner) {
-        currentRole = 'owner_resident';
-      } else if (isOwner) {
-        currentRole = 'owner';
-      } else if (isResident) {
-        currentRole = 'tenant';
-      }
-
-      // Pre-populate form with existing user data
-      const profileData = isResident || isOwner;
-      console.log('Profile data to use:', profileData);
-      
-      if (profileData) {
-        console.log('Setting ERF number:', profileData.erf_number);
-        setFormData(prev => ({
-          ...prev,
-          // Basic information
-          erf_number: profileData.erf_number || '',
-          current_role: currentRole,
-          
-          // These fields remain empty for user to fill in transition-specific info
-          // but we now have their existing data available for reference
+      // If properties array is empty but user has erfs array, use that
+      if (userProperties.length === 0 && data.erfs && data.erfs.length > 0) {
+        userProperties = data.erfs.map(erf => ({
+          erf_number: erf.erf_number || data.erf_number,
+          street_number: erf.street_number || data.property_address?.split(' ')[0] || '',
+          street_name: erf.street_name || data.property_address?.replace(/^\d+\s/, '') || ''
         }));
       }
+      
+      // If still empty, create from main profile data
+      if (userProperties.length === 0 && data.erf_number) {
+        userProperties = [{
+          erf_number: data.erf_number,
+          street_number: data.property_address?.split(' ')[0] || '',
+          street_name: data.property_address?.replace(/^\d+\s/, '') || data.property_address || ''
+        }];
+      }
+      
+      console.log('User properties:', userProperties);
+      setAvailableErfs(userProperties);
+      
+      // Determine user role - handle both old and new API response formats
+      const isResident = data.resident || data.is_resident;
+      const isOwner = data.owner || data.is_owner;
+      console.log('User roles - isResident:', isResident, 'isOwner:', isOwner);
+      console.log('Full user data:', data);
+      
+      let currentRole = '';
+      if (isResident && isOwner) {
+        currentRole = 'owner_resident';
+        console.log('User is both owner and resident');
+      } else if (isOwner) {
+        currentRole = 'owner';
+        console.log('User is owner only');
+      } else if (isResident) {
+        currentRole = 'tenant';
+        console.log('User is resident/tenant only');
+      } else {
+        console.warn('User has no defined role - neither resident nor owner');
+        // Default to a basic role if none detected
+        currentRole = 'owner'; // Default assumption
+      }
+      
+      console.log('Determined current_role:', currentRole);
+
+      // Check if ERF number is already set from URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const erfFromUrl = urlParams.get('erf');
+      
+      // Pre-populate form data
+      setFormData(prev => {
+        let erfNumber = prev.erf_number; // Keep if already set from URL
+        
+        // If no ERF from URL and user has properties, use the first one as default
+        if (!erfNumber && userProperties.length > 0) {
+          erfNumber = userProperties[0].erf_number;
+        }
+        
+      // If ERF from URL, verify it belongs to the user
+      if (erfFromUrl) {
+        const userOwnsErf = userProperties.some(prop => prop.erf_number === erfFromUrl) || data.erf_number === erfFromUrl;
+        if (userOwnsErf) {
+          erfNumber = erfFromUrl;
+        } else {
+          console.warn('User does not own ERF from URL:', erfFromUrl);
+          console.log('User properties:', userProperties);
+          console.log('User main ERF:', data.erf_number);
+          // If user's main ERF matches, allow it
+          if (data.erf_number === erfFromUrl) {
+            erfNumber = erfFromUrl;
+          } else {
+            setError(`You don't have access to ERF ${erfFromUrl}. Please select from your properties.`);
+          }
+        }
+      }        console.log('Setting ERF number:', erfNumber);
+        console.log('Setting current_role:', currentRole);
+        return {
+          ...prev,
+          erf_number: erfNumber,
+          current_role: currentRole,
+        };
+      });
 
       // Also fetch and pre-populate vehicle information
       fetchUserVehicles();
@@ -240,6 +311,9 @@ const UserTransitionRequest = () => {
         new_occupant_email: undefined,
         new_occupant_id_number: undefined,
       };
+
+      console.log('Submitting transition request with data:', submitData);
+      console.log('current_role value:', submitData.current_role);
 
       const response = await fetch('/api/transition/request', {
         method: 'POST',
@@ -357,33 +431,47 @@ const UserTransitionRequest = () => {
               <p className="text-sm text-gray-600">The information below is pre-populated from your profile. You only need to complete the transition-specific details.</p>
               
               <div className="grid md:grid-cols-2 gap-4 p-4 bg-blue-50 rounded-lg">
-                {(userInfo.resident || userInfo.owner) && (
+                {(userInfo.resident || userInfo.owner || userInfo.is_resident || userInfo.is_owner || userInfo.full_name) && (
                   <>
                     <div>
                       <Label className="text-sm font-medium text-gray-700">Current Name</Label>
-                      <p className="text-sm">{userInfo.resident?.first_name || userInfo.owner?.first_name} {userInfo.resident?.last_name || userInfo.owner?.last_name}</p>
+                      <p className="text-sm">
+                        {userInfo.resident?.first_name || userInfo.owner?.first_name || userInfo.full_name || 'Not available'} 
+                        {(userInfo.resident?.last_name || userInfo.owner?.last_name) && ` ${userInfo.resident?.last_name || userInfo.owner?.last_name}`}
+                      </p>
                     </div>
-                    <div>
-                      <Label className="text-sm font-medium text-gray-700">Current ERF</Label>
-                      <p className="text-sm">{userInfo.resident?.erf_number || userInfo.owner?.erf_number}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-medium text-gray-700">Current Address</Label>
-                      <p className="text-sm">{userInfo.resident?.full_address || userInfo.owner?.full_address}</p>
-                    </div>
+                    {availableErfs.length > 0 && (
+                      <>
+                        <div>
+                          <Label className="text-sm font-medium text-gray-700">Your Properties</Label>
+                          {availableErfs.length === 1 ? (
+                            <p className="text-sm">ERF {availableErfs[0].erf_number} - {availableErfs[0].street_number} {availableErfs[0].street_name}</p>
+                          ) : (
+                            <div className="text-sm">
+                              {availableErfs.map((property, index) => (
+                                <p key={property.erf_number} className={`${property.erf_number === formData.erf_number ? 'font-medium text-blue-600' : 'text-gray-600'}`}>
+                                  ERF {property.erf_number} - {property.street_number} {property.street_name}
+                                  {property.erf_number === formData.erf_number && ' (Selected for this request)'}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
                     <div>
                       <Label className="text-sm font-medium text-gray-700">Phone Number</Label>
-                      <p className="text-sm">{userInfo.resident?.phone_number || userInfo.owner?.phone_number}</p>
+                      <p className="text-sm">{userInfo.resident?.phone_number || userInfo.owner?.phone_number || userInfo.phone || 'Not available'}</p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-700">Intercom Code</Label>
-                      <p className="text-sm">{userInfo.resident?.intercom_code || userInfo.owner?.intercom_code}</p>
+                      <p className="text-sm">{userInfo.resident?.intercom_code || userInfo.owner?.intercom_code || userInfo.intercom_code || 'Not available'}</p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-700">Role Type</Label>
                       <p className="text-sm">
-                        {userInfo.resident && userInfo.owner ? 'Owner-Resident' : 
-                         userInfo.owner ? 'Property Owner' : 'Tenant'}
+                        {(userInfo.resident && userInfo.owner) || (userInfo.is_resident && userInfo.is_owner) ? 'Owner-Resident' : 
+                         userInfo.owner || userInfo.is_owner ? 'Property Owner' : 'Tenant'}
                       </p>
                     </div>
                   </>
@@ -409,15 +497,40 @@ const UserTransitionRequest = () => {
               <div className="grid md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="erf_number">ERF Number *</Label>
-                  <Input
-                    id="erf_number"
-                    value={formData.erf_number}
-                    readOnly
-                    disabled
-                    className="bg-gray-100 text-gray-600"
-                    title="This field is auto-populated from your profile"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">📍 Auto-filled from your profile</p>
+                  {availableErfs.length > 1 ? (
+                    // Multiple properties - show dropdown
+                    <div>
+                      <Select 
+                        value={formData.erf_number} 
+                        onValueChange={(value) => handleInputChange('erf_number', value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select your property" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableErfs.map((property) => (
+                            <SelectItem key={property.erf_number} value={property.erf_number}>
+                              ERF {property.erf_number} - {property.street_number} {property.street_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-blue-600 mt-1">🏠 Select which property this request is for</p>
+                    </div>
+                  ) : (
+                    // Single property or URL parameter - show disabled input
+                    <div>
+                      <Input
+                        id="erf_number"
+                        value={formData.erf_number}
+                        readOnly
+                        disabled
+                        className="bg-gray-100 text-gray-600"
+                        title="This field is auto-populated from your profile"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">📍 Auto-filled from your profile</p>
+                    </div>
+                  )}
                 </div>
                 
                 <div>
@@ -455,7 +568,7 @@ const UserTransitionRequest = () => {
                 </div>
               </div>
 
-              <div>
+                <div>
                 <Label htmlFor="current_role">Current Role *</Label>
                 <div className="relative">
                   <Input
@@ -463,13 +576,16 @@ const UserTransitionRequest = () => {
                     value={formData.current_role === 'owner' ? 'Property Owner' : 
                            formData.current_role === 'tenant' ? 'Tenant' : 
                            formData.current_role === 'owner_resident' ? 'Owner-Resident' : 
-                           formData.current_role}
+                           formData.current_role || 'Loading...'}
                     readOnly
                     disabled
                     className="bg-gray-100 text-gray-600"
                     title="This field is auto-populated from your profile"
                   />
                   <p className="text-xs text-gray-500 mt-1">👤 Auto-filled from your profile</p>
+                  {!formData.current_role && (
+                    <p className="text-xs text-red-500 mt-1">⚠️ Role not detected - please refresh the page</p>
+                  )}
                 </div>
               </div>
             </div>

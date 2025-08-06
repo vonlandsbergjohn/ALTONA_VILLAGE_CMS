@@ -37,21 +37,39 @@ def get_current_resident():
 @jwt_required()
 def get_my_vehicles():
     try:
-        user, resident_data, owner_data = get_current_user_data()
-        if not user:
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        if not current_user:
             return jsonify({'error': 'User not found'}), 404
+        
+        # Get all user accounts with the same email (for multi-ERF support)
+        all_user_accounts = User.query.filter_by(email=current_user.email).all()
         
         vehicles = []
         
-        # Get vehicles for residents
-        if resident_data:
-            resident_vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
-            vehicles.extend([vehicle.to_dict() for vehicle in resident_vehicles])
-        
-        # Get vehicles for owners (including owner-only users)
-        if owner_data:
-            owner_vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
-            vehicles.extend([vehicle.to_dict() for vehicle in owner_vehicles])
+        # Get vehicles from all user accounts with this email
+        for user_account in all_user_accounts:
+            # Get vehicles for residents
+            if user_account.resident:
+                resident_vehicles = Vehicle.query.filter_by(resident_id=user_account.resident.id).all()
+                for vehicle in resident_vehicles:
+                    vehicle_dict = vehicle.to_dict()
+                    # Add ERF information
+                    vehicle_dict['erf_number'] = user_account.resident.erf_number
+                    vehicle_dict['property_address'] = user_account.resident.street_address or 'Address not available'
+                    vehicle_dict['user_id'] = user_account.id
+                    vehicles.append(vehicle_dict)
+            
+            # Get vehicles for owners (including owner-only users)
+            if user_account.owner:
+                owner_vehicles = Vehicle.query.filter_by(owner_id=user_account.owner.id).all()
+                for vehicle in owner_vehicles:
+                    vehicle_dict = vehicle.to_dict()
+                    # Add ERF information
+                    vehicle_dict['erf_number'] = user_account.owner.erf_number
+                    vehicle_dict['property_address'] = user_account.owner.street_address or 'Address not available'
+                    vehicle_dict['user_id'] = user_account.id
+                    vehicles.append(vehicle_dict)
         
         return jsonify(vehicles), 200
         
@@ -62,24 +80,43 @@ def get_my_vehicles():
 @jwt_required()
 def add_vehicle():
     try:
-        user, resident_data, owner_data = get_current_user_data()
-        if not user:
+        current_user_id = get_jwt_identity()
+        current_user = User.query.get(current_user_id)
+        if not current_user:
             return jsonify({'error': 'User not found'}), 404
-        
-        # Both residents and owners can register vehicles
-        if not resident_data and not owner_data:
-            return jsonify({'error': 'Only residents and owners can register vehicles'}), 403
-        
+
         data = request.get_json()
         
         # Check if registration number already exists
         if Vehicle.query.filter_by(registration_number=data['registration_number']).first():
             return jsonify({'error': 'Vehicle with this registration number already exists'}), 400
+
+        # Get all user accounts with the same email (for multi-ERF support)
+        all_user_accounts = User.query.filter_by(email=current_user.email).all()
         
+        # Determine which ERF/user account this vehicle should be assigned to
+        target_user_id = data.get('erf_selection')  # Frontend sends the selected user_id
+        
+        if target_user_id:
+            # Multi-ERF user - validate that the selected user_id belongs to this email
+            target_user = next((user for user in all_user_accounts if user.id == target_user_id), None)
+            if not target_user:
+                return jsonify({'error': 'Invalid ERF selection'}), 400
+        else:
+            # Single ERF user or no selection - use current user
+            target_user = current_user
+        
+        # Get the resident/owner data for the target user
+        target_resident = target_user.resident if target_user.is_resident() else None
+        target_owner = target_user.owner if target_user.is_owner() else None
+        
+        if not target_resident and not target_owner:
+            return jsonify({'error': 'Selected ERF has no resident or owner data'}), 400
+
         # Create vehicle - prefer resident_id if available, otherwise use owner_id
         vehicle = Vehicle(
-            resident_id=resident_data.id if resident_data else None,
-            owner_id=owner_data.id if (owner_data and not resident_data) else None,
+            resident_id=target_resident.id if target_resident else None,
+            owner_id=target_owner.id if (target_owner and not target_resident) else None,
             registration_number=data['registration_number'],
             make=data.get('make'),
             model=data.get('model'),
@@ -92,19 +129,19 @@ def add_vehicle():
         # Log vehicle addition for change tracking
         try:
             # Get user display name and ERF number for logging
-            if resident_data:
-                user_name = f"{resident_data.first_name} {resident_data.last_name}".strip()
-                erf_number = resident_data.erf_number or 'Unknown'
-            elif owner_data:
-                user_name = f"{owner_data.first_name} {owner_data.last_name}".strip()
-                erf_number = owner_data.erf_number or 'Unknown'
+            if target_resident:
+                user_name = f"{target_resident.first_name} {target_resident.last_name}".strip()
+                erf_number = target_resident.erf_number or 'Unknown'
+            elif target_owner:
+                user_name = f"{target_owner.first_name} {target_owner.last_name}".strip()
+                erf_number = target_owner.erf_number or 'Unknown'
             else:
-                user_name = user.email
+                user_name = target_user.email
                 erf_number = 'Unknown'
             
             # Log the new vehicle addition
             log_user_change(
-                user.id, 
+                target_user.id, 
                 user_name, 
                 erf_number, 
                 'user_add', 
@@ -115,13 +152,13 @@ def add_vehicle():
             
             # Also log other vehicle details if provided
             if data.get('make'):
-                log_user_change(user.id, user_name, erf_number, 'user_add', 'vehicle_make', 'None', data['make'])
+                log_user_change(target_user.id, user_name, erf_number, 'user_add', 'vehicle_make', 'None', data['make'])
             
             if data.get('model'):
-                log_user_change(user.id, user_name, erf_number, 'user_add', 'vehicle_model', 'None', data['model'])
+                log_user_change(target_user.id, user_name, erf_number, 'user_add', 'vehicle_model', 'None', data['model'])
             
             if data.get('color'):
-                log_user_change(user.id, user_name, erf_number, 'user_add', 'vehicle_color', 'None', data['color'])
+                log_user_change(target_user.id, user_name, erf_number, 'user_add', 'vehicle_color', 'None', data['color'])
                 
         except Exception as log_error:
             print(f"Error logging user vehicle addition: {log_error}")

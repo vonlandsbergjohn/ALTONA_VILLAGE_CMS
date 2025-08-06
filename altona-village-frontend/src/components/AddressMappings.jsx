@@ -25,6 +25,8 @@ const AddressMappings = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [file, setFile] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50); // Show 50 items per page for large datasets
 
   useEffect(() => {
     loadMappings();
@@ -59,6 +61,24 @@ const AddressMappings = () => {
       return;
     }
 
+    // Confirm replacement of existing data
+    const confirmed = window.confirm(
+      '⚠️ IMPORTANT: This upload will completely replace ALL existing address mappings.\n\n' +
+      'Are you sure you want to continue? This action cannot be undone.\n\n' +
+      `File to upload: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+
+    // Check file size (limit to 10MB for large uploads)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      setError('File size too large. Please keep files under 10MB.');
+      return;
+    }
+
     setUploading(true);
     setError('');
     setSuccess('');
@@ -81,12 +101,21 @@ const AddressMappings = () => {
       if (response.ok) {
         setSuccess(`Successfully imported ${data.imported_count} address mappings`);
         setFile(null);
+        // Reset file input
+        const fileInput = document.getElementById('file-upload');
+        if (fileInput) fileInput.value = '';
         await loadMappings();
       } else {
-        setError(data.error || 'Upload failed');
+        // Show detailed error information for large uploads
+        if (data.errors && data.errors.length > 0) {
+          const errorSummary = `Upload failed with ${data.total_errors || data.errors.length} errors. First few: ${data.errors.slice(0, 3).join('; ')}`;
+          setError(errorSummary);
+        } else {
+          setError(data.error || 'Upload failed');
+        }
       }
     } catch (error) {
-      setError('Network error during upload');
+      setError('Network error during upload. For large files, this may indicate a timeout.');
     } finally {
       setUploading(false);
     }
@@ -116,6 +145,39 @@ const AddressMappings = () => {
       }
     } catch (error) {
       setError('Network error downloading template');
+    }
+  };
+
+  const downloadCurrentData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/address-mappings/export', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Filename is set by the backend with timestamp
+        const contentDisposition = response.headers.get('Content-Disposition');
+        const filename = contentDisposition 
+          ? contentDisposition.split('filename=')[1].replace(/"/g, '')
+          : 'address_mappings_backup.csv';
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        setSuccess('Address mappings backed up successfully');
+      } else {
+        setError('Failed to download current data');
+      }
+    } catch (error) {
+      setError('Network error downloading current data');
     }
   };
 
@@ -179,6 +241,17 @@ const AddressMappings = () => {
     mapping.street_number.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredMappings.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentMappings = filteredMappings.slice(startIndex, endIndex);
+
+  // Reset pagination when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -228,7 +301,11 @@ const AddressMappings = () => {
           </CardTitle>
           <CardDescription>
             Upload a CSV or Excel file with ERF numbers and their corresponding street addresses.
-            The file should contain columns: erf_number, street_number, street_name
+            The file should contain columns: erf_number, street_number, street_name.
+            <br />
+            <strong>Supports large files:</strong> Can handle up to 300+ address mappings (10MB max file size).
+            <br />
+            <span className="text-red-600 font-medium">⚠️ Warning: Uploading will completely replace all existing address mappings.</span>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -244,6 +321,12 @@ const AddressMappings = () => {
                 onChange={(e) => setFile(e.target.files[0])}
                 disabled={uploading}
               />
+              {file && (
+                <div className="mt-2 text-sm text-gray-600">
+                  <p>Selected: {file.name}</p>
+                  <p>Size: {(file.size / 1024).toFixed(1)} KB</p>
+                </div>
+              )}
             </div>
             <Button 
               onClick={handleFileUpload} 
@@ -264,10 +347,35 @@ const AddressMappings = () => {
             </Button>
           </div>
 
-          <div className="flex gap-2">
+          <div className="bg-blue-50 p-3 rounded-lg">
+            <h4 className="text-sm font-medium text-blue-800 mb-2">Large File Upload Tips:</h4>
+            <ul className="text-xs text-blue-700 space-y-1">
+              <li>• For 300+ records, ensure good internet connection</li>
+              <li>• Upload may take 30-60 seconds for large files</li>
+              <li>• CSV format is generally faster than Excel</li>
+              <li>• Required columns: erf_number, street_number, street_name</li>
+              <li>• Optional columns: suburb, postal_code</li>
+            </ul>
+          </div>
+
+          <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+            <h4 className="text-sm font-medium text-red-800 mb-2">⚠️ Data Replacement Warning:</h4>
+            <ul className="text-xs text-red-700 space-y-1">
+              <li>• Each upload completely replaces ALL existing address mappings</li>
+              <li>• Previous address data will be permanently deleted</li>
+              <li>• Make sure your file contains all addresses you want to keep</li>
+              <li>• Use "Download Current Data" to backup before uploading</li>
+            </ul>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
             <Button onClick={downloadTemplate} variant="outline" size="sm">
               <Download className="h-4 w-4 mr-2" />
               Download Template
+            </Button>
+            <Button onClick={downloadCurrentData} variant="outline" size="sm" className="bg-blue-50 hover:bg-blue-100">
+              <Download className="h-4 w-4 mr-2" />
+              Download Current Data
             </Button>
             <Button onClick={clearAllMappings} variant="destructive" size="sm">
               <Trash2 className="h-4 w-4 mr-2" />
@@ -291,6 +399,7 @@ const AddressMappings = () => {
           </div>
           <Badge variant="secondary">
             {filteredMappings.length} of {mappings.length} mappings
+            {totalPages > 1 && ` (Page ${currentPage} of ${totalPages})`}
           </Badge>
         </div>
       </div>
@@ -331,7 +440,7 @@ const AddressMappings = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMappings.map((mapping) => (
+                  {currentMappings.map((mapping) => (
                     <tr key={mapping.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-3 px-4 font-mono text-sm">{mapping.erf_number}</td>
                       <td className="py-3 px-4">{mapping.street_number}</td>
@@ -353,6 +462,59 @@ const AddressMappings = () => {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+          
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                Showing {startIndex + 1} to {Math.min(endIndex, filteredMappings.length)} of {filteredMappings.length} entries
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <div className="flex gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className="w-10"
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

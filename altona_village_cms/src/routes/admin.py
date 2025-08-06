@@ -9,6 +9,19 @@ import csv
 import os
 import sqlite3
 
+# Test pandas and openpyxl imports at startup
+try:
+    import pandas as pd
+    print("✅ pandas imported successfully in admin.py")
+except ImportError as e:
+    print(f"❌ pandas import failed in admin.py: {e}")
+
+try:
+    import openpyxl
+    print("✅ openpyxl imported successfully in admin.py")
+except ImportError as e:
+    print(f"❌ openpyxl import failed in admin.py: {e}")
+
 # Import change tracking function
 try:
     from src.routes.admin_notifications import log_user_change
@@ -2060,9 +2073,13 @@ def upload_address_mappings():
                     import pandas as pd
                     df = pd.read_excel(file)
                     data = df.to_dict('records')
-                except ImportError:
+                except ImportError as e:
                     return jsonify({
-                        'error': 'pandas and openpyxl libraries are required for Excel file processing. Please install them with: pip install pandas openpyxl'
+                        'error': f'pandas and openpyxl libraries are required for Excel file processing. ImportError: {str(e)}. Please install them with: pip install pandas openpyxl'
+                    }), 500
+                except Exception as e:
+                    return jsonify({
+                        'error': f'Excel file processing failed: {str(e)}. Make sure the file is a valid Excel format.'
                     }), 500
         except Exception as e:
             return jsonify({'error': f'Failed to read file: {str(e)}'}), 400
@@ -2234,6 +2251,61 @@ def download_address_template():
         
     except Exception as e:
         return jsonify({'error': f'Failed to generate template: {str(e)}'}), 500
+
+@admin_bp.route('/address-mappings/export', methods=['GET'])
+@jwt_required()
+def export_address_mappings():
+    """Export all current address mappings to CSV"""
+    admin_check = admin_required()
+    if admin_check:
+        return admin_check
+    
+    try:
+        # Get all current address mappings
+        mappings = ErfAddressMapping.query.order_by(ErfAddressMapping.erf_number).all()
+        
+        # Create CSV output
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'erf_number',
+            'street_number', 
+            'street_name',
+            'suburb',
+            'postal_code'
+        ])
+        
+        # Write current data
+        for mapping in mappings:
+            writer.writerow([
+                mapping.erf_number,
+                mapping.street_number,
+                mapping.street_name,
+                mapping.suburb or '',
+                mapping.postal_code or ''
+            ])
+        
+        # Generate response
+        output.seek(0)
+        csv_content = output.getvalue()
+        output.close()
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'address_mappings_backup_{timestamp}.csv'
+        
+        return Response(
+            csv_content,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'text/csv; charset=utf-8'
+            }
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to export address mappings: {str(e)}'}), 500
 
 @admin_bp.route('/address-mappings/<int:mapping_id>', methods=['DELETE'])
 @jwt_required()

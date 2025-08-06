@@ -7,6 +7,7 @@ Following the same pattern as the complaint system
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models.user import db, User, Resident, Owner, UserTransitionRequest, TransitionRequestUpdate, TransitionVehicle, Vehicle
+from ..utils.logging import log_user_change
 from datetime import datetime, date
 import uuid
 
@@ -865,6 +866,14 @@ def update_transition_request_status(request_id):
         if new_status == 'completed':
             transition_request.completion_date = datetime.utcnow()
             
+            # Check if this is a termination/exit (no new occupant)
+            is_termination = (
+                transition_request.new_occupant_type == 'terminated' or
+                transition_request.request_type == 'exit' or
+                (transition_request.new_occupant_type in ['', 'unknown', None] and 
+                 not transition_request.new_occupant_first_name)
+            )
+            
             # Check if this is a privacy-compliant transition request (no new occupant data)
             is_privacy_compliant = (
                 not transition_request.new_occupant_first_name or 
@@ -875,7 +884,17 @@ def update_transition_request_status(request_id):
                 transition_request.new_occupant_type in ['', 'unknown', None]
             )
             
-            if is_privacy_compliant:
+            if is_termination:
+                # Handle termination/exit - deactivate user and remove from gate register
+                termination_result = handle_user_termination(transition_request)
+                if not termination_result['success']:
+                    current_app.logger.error(f"User termination failed: {termination_result['error']}")
+                    return jsonify({'error': f'Termination failed: {termination_result["error"]}'}), 500
+                
+                # Mark migration as completed for terminations
+                transition_request.migration_completed = True
+                
+            elif is_privacy_compliant:
                 # Privacy-compliant transitions must be completed via the linking interface
                 if not transition_request.migration_completed:
                     return jsonify({
@@ -1469,3 +1488,79 @@ def mark_transition_migration_completed(request_id):
         db.session.rollback()
         current_app.logger.error(f"Error marking transition as migration completed: {str(e)}")
         return jsonify({'error': 'Failed to mark migration as completed'}), 500
+
+
+def handle_user_termination(transition_request):
+    """
+    Handle user termination/exit from the estate.
+    This deactivates the user and removes them from the gate register.
+    """
+    try:
+        # Get the user being terminated
+        user = User.query.get(transition_request.user_id)
+        if not user:
+            return {'success': False, 'error': 'User not found'}
+        
+        erf_number = transition_request.erf_number
+        
+        # Deactivate the user
+        user.status = 'inactive'
+        user.is_active = False
+        
+        # Deactivate resident record if exists
+        if user.resident:
+            user.resident.status = 'inactive'
+            user.resident.is_active = False
+        
+        # Deactivate owner record if exists  
+        if user.owner:
+            user.owner.status = 'inactive'
+            user.owner.is_active = False
+        
+        # Remove from gate register by deactivating user access
+        # The gate register is generated from active users, so deactivating 
+        # the user will automatically remove them from the gate register
+        
+        # Deactivate user vehicles
+        vehicles = Vehicle.query.filter_by(user_id=user.id).all()
+        for vehicle in vehicles:
+            vehicle.is_active = False
+            vehicle.status = 'terminated'
+        
+        # Log the termination
+        log_user_change(
+            user.id, 
+            f"{user.first_name} {user.last_name}" if hasattr(user, 'first_name') else user.full_name,
+            erf_number,
+            'transition_termination',
+            'user_status',
+            'active',
+            'terminated'
+        )
+        
+        # Mark transition request as migration completed
+        transition_request.migration_completed = True
+        transition_request.migration_date = datetime.utcnow()
+        
+        # Add update record
+        update = TransitionRequestUpdate(
+            transition_request_id=transition_request.id,
+            user_id=transition_request.user_id,
+            update_text=f"User terminated and removed from ERF {erf_number}. All access revoked.",
+            update_type='termination'
+        )
+        
+        db.session.add(update)
+        db.session.commit()
+        
+        return {
+            'success': True, 
+            'message': f'User successfully terminated and removed from ERF {erf_number}',
+            'user_id': user.id,
+            'erf_number': erf_number
+        }
+        
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error handling user termination: {str(e)}")
+        return {'success': False, 'error': f'Termination failed: {str(e)}'}

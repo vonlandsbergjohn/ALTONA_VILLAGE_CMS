@@ -96,7 +96,14 @@ const ResidentDashboard = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">
-          Welcome, {user?.resident?.first_name || user?.owner?.first_name || user?.full_name || 'Resident'}!
+          Welcome, {(() => {
+            // Use the aggregated full_name from the multi-ERF profile API
+            if (user?.full_name) {
+              return user.full_name.split(' ')[0]; // First name only for welcome
+            }
+            // Fallback to legacy structure
+            return user?.resident?.first_name || user?.owner?.first_name || 'Resident';
+          })()}!
         </h1>
         <p className="text-gray-600">Manage your Altona Village account and services</p>
       </div>
@@ -114,12 +121,7 @@ const ResidentDashboard = () => {
             <div>
               <p className="text-sm text-gray-600">Name</p>
               <p className="font-medium">
-                {user?.resident?.first_name && user?.resident?.last_name 
-                  ? `${user.resident.first_name} ${user.resident.last_name}`
-                  : user?.owner?.first_name && user?.owner?.last_name
-                    ? `${user.owner.first_name} ${user.owner.last_name}`
-                    : user?.full_name || 'Not available'
-                }
+                {user?.full_name || 'Not available'}
               </p>
             </div>
             <div>
@@ -132,10 +134,10 @@ const ResidentDashboard = () => {
                 {getUserResidencyType(user)}
               </Badge>
             </div>
-            {user?.resident?.phone_number && (
+            {user?.phone && (
               <div>
                 <p className="text-sm text-gray-600">Phone</p>
-                <p className="font-medium">{user?.resident?.phone_number}</p>
+                <p className="font-medium">{user.phone}</p>
               </div>
             )}
             <div>
@@ -144,7 +146,20 @@ const ResidentDashboard = () => {
                 ERF Number
               </p>
               <p className="font-medium">
-                {user?.resident?.erf_number || user?.owner?.erf_number || 'Not available'}
+                {(() => {
+                  // Handle new multi-ERF structure
+                  if (user?.erfs && user.erfs.length > 0) {
+                    if (user.erfs.length === 1) {
+                      // Single ERF - show the ERF number
+                      return user.erfs[0].erf_number || 'Not available';
+                    } else {
+                      // Multiple ERFs - show summary
+                      return `Multiple Properties (${user.erfs.length} ERFs)`;
+                    }
+                  }
+                  // Fallback to legacy structure
+                  return user?.resident?.erf_number || user?.owner?.erf_number || 'Not available';
+                })()}
               </p>
             </div>
             <div>
@@ -153,7 +168,20 @@ const ResidentDashboard = () => {
                 Intercom Code
               </p>
               <p className="font-medium">
-                {user?.resident?.intercom_code || user?.owner?.intercom_code || 'Not available'}
+                {(() => {
+                  // Handle new multi-ERF structure
+                  if (user?.erfs && user.erfs.length > 0) {
+                    if (user.erfs.length === 1) {
+                      // Single ERF - show the intercom code
+                      return user.erfs[0].intercom_code || 'Not available';
+                    } else {
+                      // Multiple ERFs - direct to My Properties tab
+                      return 'View in My Properties tab';
+                    }
+                  }
+                  // Fallback to legacy structure
+                  return user?.resident?.intercom_code || user?.owner?.intercom_code || 'Not available';
+                })()}
               </p>
             </div>
           </div>

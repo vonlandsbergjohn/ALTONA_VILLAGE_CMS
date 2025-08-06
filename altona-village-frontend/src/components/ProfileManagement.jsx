@@ -485,17 +485,6 @@ const ProfileManagement = () => {
                           </div>
 
                           <div className="ml-4 flex flex-col space-y-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => window.open(`/map?erf=${erf.erf_number}`, '_blank')}
-                              className="flex items-center"
-                            >
-                              <MapPin className="w-4 h-4 mr-1" />
-                              View on Map
-                              <ExternalLink className="w-3 h-3 ml-1" />
-                            </Button>
-                            
                             {erf.status === 'active' && (
                               <Button
                                 size="sm"

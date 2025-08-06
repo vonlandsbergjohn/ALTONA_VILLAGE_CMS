@@ -247,6 +247,7 @@ def profile():
                 primary_profile = erf_data.copy()
         
         # Add owner data if available
+        owner_added_separately = False
         if account.owner:
             owner = account.owner
             owner_data = {
@@ -274,13 +275,14 @@ def profile():
                 owner_erf = erf_data.copy()
                 owner_erf.update(owner_data)
                 erfs.append(owner_erf)
+                owner_added_separately = True
                 
             # Use first active account as primary profile
             if not primary_profile and account.status == 'active':
                 primary_profile = owner_data.copy()
         
-        # Add this ERF to the list (if it has resident/owner data)
-        if account.resident or account.owner:
+        # Add this ERF to the list (if it has resident data, or owner data that wasn't added separately)
+        if account.resident or (account.owner and not owner_added_separately):
             erfs.append(erf_data)
     
     # Use current account as fallback if no active account found

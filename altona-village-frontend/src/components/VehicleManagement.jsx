@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { residentAPI } from '@/lib/api.js';
+import { residentAPI, authAPI } from '@/lib/api.js';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,10 +8,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Car, Plus, Edit, Trash2, Calendar, Palette, Settings } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Car, Plus, Edit, Trash2, Calendar, Palette, Settings, Home } from 'lucide-react';
 
 const VehicleManagement = () => {
   const [vehicles, setVehicles] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -22,12 +24,23 @@ const VehicleManagement = () => {
     model: '',
     year: '',
     color: '',
-    vehicle_type: 'car'
+    vehicle_type: 'car',
+    erf_selection: '' // New field for ERF selection
   });
 
   useEffect(() => {
     fetchVehicles();
+    fetchUserProfile();
   }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await authAPI.getProfile();
+      setUserProfile(response.data);
+    } catch (error) {
+      console.error('Failed to load user profile:', error);
+    }
+  };
 
   const fetchVehicles = async () => {
     try {
@@ -47,7 +60,8 @@ const VehicleManagement = () => {
       model: '',
       year: '',
       color: '',
-      vehicle_type: 'car'
+      vehicle_type: 'car',
+      erf_selection: userProfile?.erfs?.length === 1 ? userProfile.erfs[0].user_id : '' // Auto-select if single ERF
     });
     setEditingVehicle(null);
   };
@@ -62,6 +76,13 @@ const VehicleManagement = () => {
       const regPattern = /^[A-Z]{1,3}[\s-]?\d{1,6}[\s-]?[A-Z]{0,2}$/i;
       if (!regPattern.test(formData.registration_number.replace(/\s/g, ''))) {
         setMessage({ type: 'error', text: 'Please enter a valid South African registration number' });
+        setLoading(false);
+        return;
+      }
+
+      // Validate ERF selection for multi-ERF users
+      if (userProfile?.erfs && userProfile.erfs.length > 1 && !formData.erf_selection) {
+        setMessage({ type: 'error', text: 'Please select which property this vehicle belongs to' });
         setLoading(false);
         return;
       }
@@ -189,6 +210,47 @@ const VehicleManagement = () => {
                     required
                   />
                 </div>
+                
+                {/* ERF Selection for Multi-ERF Users */}
+                {userProfile?.erfs && userProfile.erfs.length > 1 && (
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="erf_selection">Property / ERF *</Label>
+                    <Select
+                      value={formData.erf_selection}
+                      onValueChange={(value) => setFormData({...formData, erf_selection: value})}
+                      required
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select which property this vehicle belongs to" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {userProfile.erfs.map((erf) => (
+                          <SelectItem key={erf.user_id} value={erf.user_id}>
+                            <div className="flex items-center space-x-2">
+                              <Home className="w-4 h-4" />
+                              <span>ERF {erf.erf_number} - {erf.full_address}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-gray-500">
+                      This vehicle will be associated with the selected property for gate access.
+                    </p>
+                  </div>
+                )}
+                
+                {/* Single ERF Users - Show current property */}
+                {userProfile?.erfs && userProfile.erfs.length === 1 && (
+                  <div className="col-span-2 space-y-2">
+                    <Label>Property</Label>
+                    <div className="flex items-center space-x-2 p-2 bg-gray-50 rounded-md">
+                      <Home className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm">ERF {userProfile.erfs[0].erf_number} - {userProfile.erfs[0].full_address}</span>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="space-y-2">
                   <Label htmlFor="make">Make *</Label>
                   <Input
@@ -300,6 +362,9 @@ const VehicleManagement = () => {
                 <TableRow>
                   <TableHead>Registration</TableHead>
                   <TableHead>Vehicle Details</TableHead>
+                  {userProfile?.erfs && userProfile.erfs.length > 1 && (
+                    <TableHead>Property / ERF</TableHead>
+                  )}
                   <TableHead>Type</TableHead>
                   <TableHead>Registered</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -335,6 +400,30 @@ const VehicleManagement = () => {
                         </div>
                       </div>
                     </TableCell>
+                    
+                    {/* ERF/Property column for multi-ERF users */}
+                    {userProfile?.erfs && userProfile.erfs.length > 1 && (
+                      <TableCell>
+                        <div className="flex items-center space-x-1">
+                          <Home className="w-4 h-4 text-gray-400" />
+                          <span className="text-sm">
+                            {(() => {
+                              // Find which ERF this vehicle belongs to
+                              if (vehicle.owner_id) {
+                                const matchingErf = userProfile.erfs.find(erf => erf.user_id === vehicle.owner_id);
+                                return matchingErf ? `ERF ${matchingErf.erf_number}` : 'Unknown ERF';
+                              }
+                              if (vehicle.resident_id) {
+                                const matchingErf = userProfile.erfs.find(erf => erf.user_id === vehicle.resident_id);
+                                return matchingErf ? `ERF ${matchingErf.erf_number}` : 'Unknown ERF';
+                              }
+                              return 'Unknown ERF';
+                            })()}
+                          </span>
+                        </div>
+                      </TableCell>
+                    )}
+                    
                     <TableCell>
                       <Badge className={getVehicleTypeColor(vehicle.vehicle_type)}>
                         {vehicle.vehicle_type?.charAt(0).toUpperCase() + vehicle.vehicle_type?.slice(1) || 'Car'}
