@@ -41,6 +41,10 @@ const AdminCommunication = () => {
   // File upload state
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileUploading, setFileUploading] = useState(false);
+  
+  // Individual message file upload state
+  const [individualUploadedFile, setIndividualUploadedFile] = useState(null);
+  const [individualFileUploading, setIndividualFileUploading] = useState(false);
 
   useEffect(() => {
     loadRecipientStats();
@@ -178,15 +182,22 @@ const AdminCommunication = () => {
 
     setLoading(true);
     try {
-      const response = await adminAPI.sendIndividualEmail({
+      const emailData = {
         user_id: foundUser.id,
         subject: individualData.subject,
         message: individualData.message
-      });
+      };
+      
+      // Add attachment filename if file is uploaded
+      if (individualUploadedFile) {
+        emailData.attachment_filename = individualUploadedFile.filename;
+      }
+      
+      const response = await adminAPI.sendIndividualEmail(emailData);
       
       setMessage({ 
         type: 'success', 
-        text: response.data.message || 'Email sent successfully!'
+        text: response.data.message || `Email sent successfully!${individualUploadedFile ? ' (with attachment)' : ''}`
       });
       
       // Reset form
@@ -196,6 +207,11 @@ const AdminCommunication = () => {
         message: ''
       });
       setFoundUser(null);
+      
+      // Clear uploaded file
+      if (individualUploadedFile) {
+        removeIndividualAttachment();
+      }
       
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to send email: ' + (error.response?.data?.error || error.message) });
@@ -249,6 +265,43 @@ const AdminCommunication = () => {
     setUploadedFile(null);
     // Clear the file input
     document.getElementById('file-upload').value = '';
+  };
+
+  // Individual message file upload functions
+  const handleIndividualFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File size must be less than 10MB' });
+      return;
+    }
+
+    setIndividualFileUploading(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await adminAPI.uploadAttachment(formData);
+      setIndividualUploadedFile(response.data);
+      setMessage({ type: 'success', text: 'File uploaded successfully!' });
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to upload file: ' + (error.response?.data?.error || error.message) });
+    } finally {
+      setIndividualFileUploading(false);
+    }
+  };
+
+  const removeIndividualAttachment = () => {
+    setIndividualUploadedFile(null);
+    // Clear the file input
+    const fileInput = document.getElementById('individual-file-upload');
+    if (fileInput) {
+      fileInput.value = '';
+    }
   };
 
   return (
@@ -662,6 +715,54 @@ const AdminCommunication = () => {
                     <p className="text-xs text-gray-500 mt-1">{individualData.message.length}/5000 characters</p>
                   </div>
 
+                  {/* File Attachment */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      📎 Attachment (Optional)
+                    </label>
+                    
+                    {!individualUploadedFile ? (
+                      <div className="flex items-center">
+                        <input
+                          type="file"
+                          id="individual-file-upload"
+                          onChange={handleIndividualFileUpload}
+                          disabled={individualFileUploading}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                        />
+                        {individualFileUploading && (
+                          <div className="ml-3 flex items-center">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600"></div>
+                            <span className="ml-2 text-sm text-gray-600">Uploading...</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
+                        <div className="flex items-center">
+                          <span className="text-green-600 mr-2">📄</span>
+                          <div>
+                            <p className="text-sm font-medium text-green-800">{individualUploadedFile.original_filename}</p>
+                            <p className="text-xs text-green-600">
+                              {Math.round(individualUploadedFile.file_size / 1024)} KB - Ready to send
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={removeIndividualAttachment}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    
+                    <p className="text-xs text-gray-500 mt-1">
+                      Supported formats: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG, GIF (Max 10MB)
+                    </p>
+                  </div>
+
                   {/* Preview */}
                   {individualData.subject && individualData.message && foundUser && (
                     <div className="p-4 bg-purple-50 border border-purple-200 rounded-md">
@@ -670,6 +771,9 @@ const AdminCommunication = () => {
                         <p><strong>To:</strong> {foundUser.full_name} ({foundUser.email})</p>
                         <p><strong>ERF:</strong> {foundUser.erf_number}</p>
                         <p><strong>Subject:</strong> {individualData.subject}</p>
+                        {individualUploadedFile && (
+                          <p><strong>Attachment:</strong> {individualUploadedFile.original_filename} ({Math.round(individualUploadedFile.file_size / 1024)} KB)</p>
+                        )}
                         <div className="mt-2 p-2 bg-white border border-purple-200 rounded">
                           <p className="whitespace-pre-wrap">{individualData.message}</p>
                         </div>
@@ -700,7 +804,8 @@ const AdminCommunication = () => {
                   <p>1. Enter the ERF number to search for the property owner/resident</p>
                   <p>2. Review the found user details to confirm it's the correct person</p>
                   <p>3. Compose your email with a clear subject and message</p>
-                  <p>4. Review the preview and send the individual message</p>
+                  <p>4. Optionally attach a file (PDF, DOC, images, etc.)</p>
+                  <p>5. Review the preview and send the individual message</p>
                 </div>
               </div>
             </div>
@@ -712,9 +817,9 @@ const AdminCommunication = () => {
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
         <h3 className="text-lg font-medium text-yellow-800 mb-3">📋 Communication Guidelines</h3>
         <div className="text-sm text-yellow-700 space-y-2">
-          <p>• <strong>Bulk Email:</strong> Best for detailed announcements, documents, and formal communications to groups</p>
+          <p>• <strong>Bulk Email:</strong> Best for detailed announcements, documents, and formal communications to groups (supports attachments)</p>
           <p>• <strong>Bulk WhatsApp:</strong> Best for urgent updates, short notices, and quick community alerts to groups</p>
-          <p>• <strong>Individual Messages:</strong> Perfect for personal communication using ERF numbers as reference</p>
+          <p>• <strong>Individual Messages:</strong> Perfect for personal communication using ERF numbers as reference (supports attachments)</p>
           <p>• <strong>Recipients:</strong> 'All Users' includes both residents and owners, use specific groups when needed</p>
           <p>• <strong>Privacy:</strong> Always respect resident privacy and only send relevant community information</p>
           <p>• <strong>Frequency:</strong> Avoid over-communication to prevent message fatigue</p>

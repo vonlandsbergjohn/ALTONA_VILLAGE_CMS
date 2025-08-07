@@ -240,11 +240,12 @@ const AdminResidents = () => {
   };
 
   // Vehicle Management Functions
-  const loadVehicles = async (userId) => {
+  const loadVehicles = async (userId, filterByErf = true) => {
     if (!userId) return;
     try {
       setVehicleLoading(true);
-      const response = await adminAPI.getResidentVehicles(userId);
+      const params = filterByErf ? { filter_by_erf: 'true' } : {};
+      const response = await adminAPI.getResidentVehicles(userId, params);
       setVehicles(response.data);
     } catch (error) {
       console.error('Error loading vehicles:', error);
