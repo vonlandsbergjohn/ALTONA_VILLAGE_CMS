@@ -1,10 +1,8 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from src.models.user import User, Resident, Owner, db
-from src.utils.email_service import send_custom_email, send_email_with_attachment
-from werkzeug.utils import secure_filename
+from src.utils.email_service import send_custom_email
 import os
-import uuid
 
 communication_bp = Blueprint('communication', __name__)
 
@@ -434,183 +432,34 @@ def send_individual_email():
             return jsonify({'error': 'User does not have an email address'}), 400
             
         # Send email using the proven email service
-        # Get user's full name safely
-        user_name = user.get_full_name() if hasattr(user, 'get_full_name') else user.email.split('@')[0]
-        
-        print(f"[DEBUG] Sending individual email to: {user.email}, Name: {user_name}")
-        success, error_msg = send_custom_email(
-            to_email=user.email,
-            subject=subject,
-            message=message,
-            recipient_name=user_name
-        )
-        if success:
-            print(f"[DEBUG] ✅ Individual email sent successfully to {user.email}")
-            return jsonify({
-                'success': True,
-                'message': f'Email sent successfully to {user_name}'
-            })
-        else:
-            print(f"[DEBUG] ❌ Failed to send individual email: {error_msg}")
-            return jsonify({'error': error_msg}), 500
+        try:
+            # Get user's full name safely
+            user_name = user.get_full_name() if hasattr(user, 'get_full_name') else user.email.split('@')[0]
             
+            print(f"[DEBUG] Sending individual email to: {user.email}, Name: {user_name}")
+            success, error_msg = send_custom_email(
+                to_email=user.email,
+                subject=subject,
+                message=message,
+                recipient_name=user_name
+            )
+            if success:
+                print(f"[DEBUG] ✅ Individual email sent successfully to {user.email}")
+                return jsonify({
+                    'success': True,
+                    'message': f'Email sent successfully to {user_name}'
+                })
+            else:
+                print(f"[DEBUG] ❌ Failed to send individual email: {error_msg}")
+                return jsonify({'error': error_msg}), 500
+        except Exception as email_error:
+            print(f"[ERROR] Email sending error: {str(email_error)}")
+            import traceback
+            print(f"[ERROR] Traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Email sending failed: {str(email_error)}'}), 500
+        
     except Exception as e:
         print(f"[ERROR] Individual email error: {str(e)}")
         import traceback
         print(f"[ERROR] Traceback: {traceback.format_exc()}")
         return jsonify({'error': 'Failed to send email'}), 500
-
-@communication_bp.route('/upload-attachment', methods=['POST'])
-@jwt_required()
-def upload_attachment():
-    """Upload an attachment for email"""
-    try:
-        # Check if user is admin
-        current_user_email = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_email).first()
-        if not user or user.role != 'admin':
-            return jsonify({'error': 'Admin access required'}), 403
-        
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-        
-        # Validate file type
-        allowed_extensions = {'pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png', 'gif'}
-        file_extension = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
-        
-        if file_extension not in allowed_extensions:
-            return jsonify({'error': f'File type .{file_extension} not allowed. Allowed types: {", ".join(allowed_extensions)}'}), 400
-        
-        # Validate file size (5MB limit)
-        file.seek(0, os.SEEK_END)
-        file_size = file.tell()
-        file.seek(0)
-        
-        if file_size > 5 * 1024 * 1024:  # 5MB in bytes
-            return jsonify({'error': 'File size exceeds 5MB limit'}), 400
-        
-        # Generate secure filename
-        original_filename = file.filename
-        secure_name = secure_filename(original_filename)
-        unique_filename = f"{uuid.uuid4().hex}_{secure_name}"
-        
-        # Create uploads directory if it doesn't exist
-        upload_dir = os.path.join(os.getcwd(), 'uploads')
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Save file
-        file_path = os.path.join(upload_dir, unique_filename)
-        file.save(file_path)
-        
-        return jsonify({
-            'success': True,
-            'filename': unique_filename,
-            'original_filename': original_filename,
-            'file_size': file_size
-        })
-        
-    except Exception as e:
-        print(f"[ERROR] File upload error: {str(e)}")
-        import traceback
-        print(f"[ERROR] Traceback: {traceback.format_exc()}")
-        return jsonify({'error': 'File upload failed'}), 500
-
-@communication_bp.route('/send-email-with-attachment', methods=['POST'])
-@jwt_required()
-def send_bulk_email_with_attachment():
-    """Send bulk email with attachment to users based on recipient type"""
-    try:
-        # Check if user is admin
-        current_user_email = get_jwt_identity()
-        user = User.query.filter_by(email=current_user_email).first()
-        if not user or user.role != 'admin':
-            return jsonify({'error': 'Admin access required'}), 403
-        
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        recipient_type = data.get('recipient_type', 'all')
-        subject = data.get('subject', '').strip()
-        message = data.get('message', '').strip()
-        attachment_filename = data.get('attachment_filename', '').strip()
-        
-        if not subject or not message:
-            return jsonify({'error': 'Subject and message are required'}), 400
-        
-        if not attachment_filename:
-            return jsonify({'error': 'Attachment filename is required'}), 400
-        
-        # Verify attachment file exists
-        attachment_path = os.path.join(os.getcwd(), 'uploads', attachment_filename)
-        if not os.path.exists(attachment_path):
-            return jsonify({'error': 'Attachment file not found'}), 404
-        
-        # Get recipients based on type
-        if recipient_type == 'residents':
-            recipients = db.session.query(User).join(Resident).filter(
-                User.email.isnot(None), 
-                User.email != '',
-                User.status == 'active'
-            ).all()
-        elif recipient_type == 'owners':
-            recipients = db.session.query(User).join(Owner).filter(
-                User.email.isnot(None), 
-                User.email != '',
-                User.status == 'active'
-            ).all()
-        else:  # 'all'
-            recipients = User.query.filter(
-                User.email.isnot(None), 
-                User.email != '',
-                User.status == 'active'
-            ).all()
-        
-        if not recipients:
-            return jsonify({'error': 'No active users found for the selected recipient type'}), 404
-        
-        # Send emails with attachment
-        successful_emails = 0
-        failed_emails = 0
-        
-        for recipient in recipients:
-            try:
-                print(f"[DEBUG] Sending email with attachment to: {recipient.email}")
-                send_email_with_attachment(
-                    to_email=recipient.email,
-                    subject=subject,
-                    body=message,
-                    attachment_path=attachment_path
-                )
-                successful_emails += 1
-                print(f"[DEBUG] Email with attachment sent successfully to: {recipient.email}")
-                
-            except Exception as email_error:
-                print(f"[ERROR] Failed to send email with attachment to {recipient.email}: {str(email_error)}")
-                failed_emails += 1
-        
-        # Clean up attachment file after sending
-        try:
-            os.remove(attachment_path)
-            print(f"[DEBUG] Attachment file {attachment_filename} cleaned up successfully")
-        except Exception as cleanup_error:
-            print(f"[WARNING] Failed to clean up attachment file: {str(cleanup_error)}")
-        
-        return jsonify({
-            'success': True,
-            'sent_count': successful_emails,
-            'failed_count': failed_emails,
-            'total_recipients': len(recipients),
-            'message': f'Email with attachment sent to {successful_emails} recipients' + 
-                      (f', {failed_emails} failed' if failed_emails > 0 else '')
-        })
-        
-    except Exception as e:
-        print(f"[ERROR] Bulk email with attachment error: {str(e)}")
-        import traceback
-        print(f"[ERROR] Traceback: {traceback.format_exc()}")
-        return jsonify({'error': 'Failed to send email with attachment'}), 500

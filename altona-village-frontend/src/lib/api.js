@@ -80,7 +80,7 @@ export const adminAPI = {
   reviewChanges: (changeIds, notes = '') => api.post('/admin/changes/review', { change_ids: changeIds, notes }),
   markChangeProcessed: (changeId) => api.post(`/admin/changes/${changeId}/mark-processed`),
   // Admin Vehicle Management
-  getResidentVehicles: (userId) => api.get(`/admin/residents/${userId}/vehicles`),
+  getResidentVehicles: (userId, params = {}) => api.get(`/admin/residents/${userId}/vehicles`, { params }),
   addResidentVehicle: (userId, data) => api.post(`/admin/residents/${userId}/vehicles`, data),
   updateResidentVehicle: (userId, vehicleId, data) => api.put(`/admin/residents/${userId}/vehicles/${vehicleId}`, data),
   deleteResidentVehicle: (userId, vehicleId) => api.delete(`/admin/residents/${userId}/vehicles/${vehicleId}`),
@@ -96,6 +96,15 @@ export const adminAPI = {
   // Individual communication methods
   findUserByErf: (erfNumber) => api.post('/communication/find-user-by-erf', { erf_number: erfNumber }),
   sendIndividualEmail: (data) => api.post('/communication/send-individual-email', data),
+  // File upload and email with attachments
+  uploadAttachment: (formData) => {
+    return api.post('/communication/upload-attachment', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+  sendBulkEmailWithAttachment: (data) => api.post('/communication/send-email-with-attachment', data),
 };
 
 // Resident API

@@ -423,18 +423,7 @@ const VehicleManagement = () => {
                         <div className="flex items-center space-x-1">
                           <Home className="w-4 h-4 text-gray-400" />
                           <span className="text-sm">
-                            {(() => {
-                              // Find which ERF this vehicle belongs to
-                              if (vehicle.owner_id) {
-                                const matchingErf = userProfile.erfs.find(erf => erf.user_id === vehicle.owner_id);
-                                return matchingErf ? `ERF ${matchingErf.erf_number}` : 'Unknown ERF';
-                              }
-                              if (vehicle.resident_id) {
-                                const matchingErf = userProfile.erfs.find(erf => erf.user_id === vehicle.resident_id);
-                                return matchingErf ? `ERF ${matchingErf.erf_number}` : 'Unknown ERF';
-                              }
-                              return 'Unknown ERF';
-                            })()}
+                            {vehicle.erf_number ? `ERF ${vehicle.erf_number}` : 'Unknown ERF'}
                           </span>
                         </div>
                       </TableCell>

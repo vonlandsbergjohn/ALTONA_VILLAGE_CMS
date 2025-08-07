@@ -1,6 +1,8 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 import os
 from datetime import datetime
 from dotenv import load_dotenv
@@ -456,5 +458,107 @@ For any questions or concerns, please contact us at altonavillagehoa@gmail.com
         
     except Exception as e:
         error_msg = f"Error sending custom email to {to_email}: {str(e)}"
+        print(f"[EMAIL ERROR] {error_msg}")
+        return False, error_msg
+
+
+def send_email_with_attachment(to_email, subject, message, attachment_path=None, recipient_name=None):
+    """
+    Send an email with optional PDF attachment
+    Returns: (success: bool, error_message: str)
+    """
+    try:
+        # Email configuration from environment variables
+        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        from_email = os.getenv('FROM_EMAIL')
+        from_password = os.getenv('EMAIL_PASSWORD')
+        
+        # Validate email configuration
+        if not from_email or not from_password:
+            error_msg = "Email configuration missing. Please set FROM_EMAIL and EMAIL_PASSWORD in .env file"
+            print(f"[EMAIL ERROR] {error_msg}")
+            return False, error_msg
+        
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = from_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        msg['Reply-To'] = "altonavillagehoa@gmail.com, lynette@sir-worcester.co.za"
+        
+        # Create email body
+        greeting = f"Dear {recipient_name}," if recipient_name else "Dear Resident,"
+        
+        body = f"""
+{greeting}
+
+{message}
+
+Best regards,
+Altona Village Management Team
+
+---
+This is a message from the Altona Village Community Management System.
+For any questions or concerns, please contact us at altonavillagehoa@gmail.com
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Add attachment if provided
+        if attachment_path and os.path.exists(attachment_path):
+            try:
+                print(f"[EMAIL] Adding attachment: {attachment_path}")
+                with open(attachment_path, "rb") as attachment:
+                    # Create MIMEBase object
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(attachment.read())
+                
+                # Encode file
+                encoders.encode_base64(part)
+                
+                # Add header with filename
+                filename = os.path.basename(attachment_path)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {filename}'
+                )
+                
+                # Attach the part to message
+                msg.attach(part)
+                print(f"[EMAIL] Attachment added successfully: {filename}")
+                
+            except Exception as attachment_error:
+                print(f"[EMAIL WARNING] Failed to attach file: {attachment_error}")
+                # Continue without attachment rather than failing completely
+        elif attachment_path:
+            print(f"[EMAIL WARNING] Attachment file not found: {attachment_path}")
+        
+        # Send email
+        print(f"[EMAIL] Connecting to {smtp_server}:{smtp_port}")
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        print(f"[EMAIL] Logging in as {from_email}")
+        
+        try:
+            server.login(from_email, from_password)
+        except smtplib.SMTPAuthenticationError as auth_error:
+            print(f"[EMAIL ERROR] Authentication failed: {auth_error}")
+            server.ehlo()
+            server.login(from_email, from_password)
+        
+        text = msg.as_string()
+        print(f"[EMAIL] Sending email with {'attachment' if attachment_path else 'no attachment'} to {to_email}")
+        server.sendmail(from_email, to_email, text)
+        server.quit()
+        
+        success_msg = f"Email sent successfully to {to_email}"
+        if attachment_path and os.path.exists(attachment_path):
+            success_msg += f" with attachment: {os.path.basename(attachment_path)}"
+        print(f"[EMAIL SUCCESS] {success_msg}")
+        return True, success_msg
+        
+    except Exception as e:
+        error_msg = f"Error sending email with attachment to {to_email}: {str(e)}"
         print(f"[EMAIL ERROR] {error_msg}")
         return False, error_msg

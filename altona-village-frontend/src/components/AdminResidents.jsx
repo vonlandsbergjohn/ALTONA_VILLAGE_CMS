@@ -299,8 +299,8 @@ const AdminResidents = () => {
     setSelectedResident({ ...resident });
     setEditDialogOpen(true);
     setMessage({ type: '', text: '' });
-    // Load vehicles if resident has an ID and is a resident
-    if (resident.user_id && resident.is_resident) {
+    // Load vehicles if resident has a user_id (for both residents and owners)
+    if (resident.user_id && (resident.is_resident || resident.is_owner)) {
       loadVehicles(resident.user_id);
     }
   };
@@ -548,6 +548,17 @@ const AdminResidents = () => {
                   <Home className="w-4 h-4 mr-2" />
                   Erf {resident.erf_number}
                 </div>
+                {/* Vehicle Information */}
+                {resident.vehicles && resident.vehicles.length > 0 && (
+                  <div className="flex items-center text-gray-600">
+                    <Car className="w-4 h-4 mr-2" />
+                    {resident.vehicles.length === 1 ? (
+                      <span>{resident.vehicles[0].registration_number}</span>
+                    ) : (
+                      <span>{resident.vehicles.length} vehicles</span>
+                    )}
+                  </div>
+                )}
                 {resident.created_at && (
                   <div className="flex items-center text-gray-600">
                     <Calendar className="w-4 h-4 mr-2" />
@@ -847,6 +858,11 @@ const AdminResidents = () => {
                                   .filter(Boolean)
                                   .join(' • ')}
                               </div>
+                              {vehicle.erf_number && (
+                                <div className="text-xs text-blue-600 mt-1">
+                                  ERF {vehicle.erf_number}
+                                </div>
+                              )}
                             </div>
                           </div>
                           <Button

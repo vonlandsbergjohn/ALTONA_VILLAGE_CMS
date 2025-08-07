@@ -239,6 +239,35 @@ def get_all_residents():
                     'intercom_code': owner.intercom_code,
                 })
             
+            # Add vehicle information for this user
+            vehicles = []
+            
+            # Get vehicles from resident data
+            if user.resident:
+                resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
+                vehicles.extend([{
+                    'id': v.id,
+                    'registration_number': v.registration_number,
+                    'make': v.make,
+                    'model': v.model,
+                    'color': v.color,
+                    'status': v.status
+                } for v in resident_vehicles])
+            
+            # Get vehicles from owner data (for users who have owner records)
+            if user.owner:
+                owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
+                vehicles.extend([{
+                    'id': v.id,
+                    'registration_number': v.registration_number,
+                    'make': v.make,
+                    'model': v.model,
+                    'color': v.color,
+                    'status': v.status
+                } for v in owner_vehicles])
+            
+            user_data['vehicles'] = vehicles
+            
             result.append(user_data)
         
         return jsonify(result), 200
@@ -1770,7 +1799,7 @@ def get_gate_access_register():
 @admin_bp.route('/residents/<user_id>/vehicles', methods=['GET'])
 @jwt_required()
 def get_resident_vehicles(user_id):
-    """Get all vehicles for a specific user (admin access) - supports both residents and owners"""
+    """Get vehicles for a specific user (admin access) - supports both residents and owners"""
     admin_check = admin_required()
     if admin_check:
         return admin_check
@@ -1778,17 +1807,61 @@ def get_resident_vehicles(user_id):
     try:
         user = User.query.get_or_404(user_id)
         
+        # Check if we should filter by specific ERF (for edit dialogs)
+        filter_by_erf = request.args.get('filter_by_erf', 'false').lower() == 'true'
+        
         vehicles = []
+        seen_vehicle_ids = set()  # Track vehicles to avoid duplicates
         
-        # Get vehicles from resident data
-        if user.resident:
-            resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
-            vehicles.extend([vehicle.to_dict() for vehicle in resident_vehicles])
-        
-        # Get vehicles from owner data (for all users who have owner records)
-        if user.owner:
-            owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
-            vehicles.extend([vehicle.to_dict() for vehicle in owner_vehicles])
+        if filter_by_erf:
+            # Only return vehicles for THIS specific user's ERF (for edit dialog)
+            if user.resident:
+                resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
+                for vehicle in resident_vehicles:
+                    vehicle_dict = vehicle.to_dict()
+                    vehicle_dict['erf_number'] = user.resident.erf_number
+                    vehicle_dict['property_address'] = user.resident.full_address or 'Address not available'
+                    vehicle_dict['user_id'] = user.id
+                    vehicles.append(vehicle_dict)
+            
+            if user.owner and not user.resident:  # Only if not already a resident
+                owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
+                for vehicle in owner_vehicles:
+                    vehicle_dict = vehicle.to_dict()
+                    vehicle_dict['erf_number'] = user.owner.erf_number
+                    vehicle_dict['property_address'] = user.owner.full_address or 'Address not available'
+                    vehicle_dict['user_id'] = user.id
+                    vehicles.append(vehicle_dict)
+        else:
+            # Return all vehicles for users with same email (multi-ERF support for comprehensive view)
+            all_user_accounts = User.query.filter_by(email=user.email).all()
+            
+            for user_account in all_user_accounts:
+                # Get vehicles from resident data
+                if user_account.resident:
+                    resident_vehicles = Vehicle.query.filter_by(resident_id=user_account.resident.id).all()
+                    for vehicle in resident_vehicles:
+                        if vehicle.id not in seen_vehicle_ids:
+                            vehicle_dict = vehicle.to_dict()
+                            # Add ERF information
+                            vehicle_dict['erf_number'] = user_account.resident.erf_number
+                            vehicle_dict['property_address'] = user_account.resident.full_address or 'Address not available'
+                            vehicle_dict['user_id'] = user_account.id
+                            vehicles.append(vehicle_dict)
+                            seen_vehicle_ids.add(vehicle.id)
+                
+                # Get vehicles from owner data (for users who have owner records)
+                if user_account.owner:
+                    owner_vehicles = Vehicle.query.filter_by(owner_id=user_account.owner.id).all()
+                    for vehicle in owner_vehicles:
+                        if vehicle.id not in seen_vehicle_ids:
+                            vehicle_dict = vehicle.to_dict()
+                            # Add ERF information
+                            vehicle_dict['erf_number'] = user_account.owner.erf_number
+                            vehicle_dict['property_address'] = user_account.owner.full_address or 'Address not available'
+                            vehicle_dict['user_id'] = user_account.id
+                            vehicles.append(vehicle_dict)
+                            seen_vehicle_ids.add(vehicle.id)
         
         return jsonify(vehicles), 200
         

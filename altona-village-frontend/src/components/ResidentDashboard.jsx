@@ -267,7 +267,12 @@ const ResidentDashboard = () => {
               ) : (
                 data.vehicles.slice(0, 3).map((vehicle) => (
                   <div key={vehicle.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                    <span className="font-medium">{vehicle.registration_number}</span>
+                    <div className="flex flex-col">
+                      <span className="font-medium">{vehicle.registration_number}</span>
+                      {vehicle.erf_number && data.properties && data.properties.length > 1 && (
+                        <span className="text-xs text-blue-600">ERF {vehicle.erf_number}</span>
+                      )}
+                    </div>
                     <span className="text-sm text-gray-600">
                       {vehicle.make} {vehicle.model}
                     </span>

@@ -37,6 +37,10 @@ const AdminCommunication = () => {
     active_emails: 0,
     active_phones: 0
   });
+  
+  // File upload state
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [fileUploading, setFileUploading] = useState(false);
 
   useEffect(() => {
     loadRecipientStats();
@@ -60,10 +64,22 @@ const AdminCommunication = () => {
 
     setLoading(true);
     try {
-      const response = await adminAPI.sendBulkEmail(emailData);
+      let response;
+      
+      // Use attachment-enabled email if file is uploaded
+      if (uploadedFile) {
+        const emailDataWithAttachment = {
+          ...emailData,
+          attachment_filename: uploadedFile.filename
+        };
+        response = await adminAPI.sendBulkEmailWithAttachment(emailDataWithAttachment);
+      } else {
+        response = await adminAPI.sendBulkEmail(emailData);
+      }
+      
       setMessage({ 
         type: 'success', 
-        text: `Email sent successfully to ${response.data.sent_count} recipients!`
+        text: `Email sent successfully to ${response.data.sent_count} recipients!${uploadedFile ? ' (with attachment)' : ''}`
       });
       
       // Reset form
@@ -72,6 +88,11 @@ const AdminCommunication = () => {
         subject: '',
         message: ''
       });
+      
+      // Clear uploaded file
+      if (uploadedFile) {
+        removeAttachment();
+      }
       
       // Show detailed results if there were failures
       if (response.data.failed_count > 0) {
@@ -194,6 +215,40 @@ const AdminCommunication = () => {
 
   const clearMessage = () => {
     setMessage({ type: '', text: '' });
+  };
+
+  // File upload handlers
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'File size must be less than 10MB' });
+      return;
+    }
+
+    setFileUploading(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await adminAPI.uploadAttachment(formData);
+      setUploadedFile(response.data);
+      setMessage({ type: 'success', text: 'File uploaded successfully!' });
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to upload file: ' + (error.response?.data?.error || error.message) });
+    } finally {
+      setFileUploading(false);
+    }
+  };
+
+  const removeAttachment = () => {
+    setUploadedFile(null);
+    // Clear the file input
+    document.getElementById('file-upload').value = '';
   };
 
   return (
@@ -366,6 +421,60 @@ const AdminCommunication = () => {
                   <p className="text-xs text-gray-500 mt-1">{emailData.message.length}/5000 characters</p>
                 </div>
 
+                {/* File Attachment */}
+                <div className="mb-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    📎 Attachment (Optional)
+                  </label>
+                  <div className="border-2 border-dashed border-gray-300 rounded-md p-4">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      id="file-upload"
+                    />
+                    <label
+                      htmlFor="file-upload"
+                      className="cursor-pointer flex flex-col items-center justify-center text-center"
+                    >
+                      <div className="text-gray-400 mb-2">
+                        📁
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium text-blue-600 hover:text-blue-500">
+                          Click to upload
+                        </span> or drag and drop
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        PDF, DOC, DOCX, TXT, JPG, PNG (max 10MB)
+                      </div>
+                    </label>
+                    
+                    {uploadedFile && (
+                      <div className="mt-3 flex items-center justify-between bg-green-50 border border-green-200 rounded-md p-3">
+                        <div className="flex items-center">
+                          <span className="text-green-600 mr-2">✅</span>
+                          <span className="text-sm text-green-800">{uploadedFile.original_filename}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={removeAttachment}
+                          className="text-red-600 hover:text-red-800 text-sm"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    
+                    {fileUploading && (
+                      <div className="mt-3 text-center">
+                        <div className="text-sm text-blue-600">📤 Uploading...</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Preview */}
                 {emailData.subject && emailData.message && (
                   <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-md">
@@ -373,6 +482,9 @@ const AdminCommunication = () => {
                     <div className="text-sm">
                       <p><strong>To:</strong> {emailData.recipient_type === 'all' ? 'All Users' : emailData.recipient_type === 'residents' ? 'Residents' : 'Owners'} ({getRecipientCount(emailData.recipient_type)} recipients)</p>
                       <p><strong>Subject:</strong> {emailData.subject}</p>
+                      {uploadedFile && (
+                        <p><strong>Attachment:</strong> 📎 {uploadedFile.original_filename}</p>
+                      )}
                       <div className="mt-2 p-2 bg-white border border-gray-200 rounded">
                         <p className="whitespace-pre-wrap">{emailData.message}</p>
                       </div>
