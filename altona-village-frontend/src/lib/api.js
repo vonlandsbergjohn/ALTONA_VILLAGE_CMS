@@ -89,6 +89,13 @@ export const adminAPI = {
   // User Management
   permanentlyDeleteUser: (userId, data) => api.delete(`/admin/users/${userId}/permanent-delete`, { data }),
   getDeletionLogs: (daysBack = 30) => api.get(`/admin/users/deletion-logs?days_back=${daysBack}`),
+  // Communication API methods
+  getCommunicationStats: () => api.get('/communication/stats'),
+  sendBulkEmail: (data) => api.post('/communication/send-email', data),
+  sendBulkWhatsApp: (data) => api.post('/communication/send-whatsapp', data),
+  // Individual communication methods
+  findUserByErf: (erfNumber) => api.post('/communication/find-user-by-erf', { erf_number: erfNumber }),
+  sendIndividualEmail: (data) => api.post('/communication/send-individual-email', data),
 };
 
 // Resident API

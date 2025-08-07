@@ -18,6 +18,16 @@ const AdminCommunication = () => {
     recipient_type: 'all',
     message: ''
   });
+
+  // Individual communication state
+  const [individualData, setIndividualData] = useState({
+    erf_number: '',
+    subject: '',
+    message: ''
+  });
+  
+  const [foundUser, setFoundUser] = useState(null);
+  const [searchingUser, setSearchingUser] = useState(false);
   
   // Recipients statistics
   const [recipientStats, setRecipientStats] = useState({
@@ -104,6 +114,70 @@ const AdminCommunication = () => {
       
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to send WhatsApp: ' + (error.response?.data?.error || error.message) });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFindUser = async () => {
+    if (!individualData.erf_number.trim()) {
+      setMessage({ type: 'error', text: 'ERF number is required' });
+      return;
+    }
+
+    setSearchingUser(true);
+    try {
+      const response = await adminAPI.findUserByErf(individualData.erf_number);
+      if (response.data.found) {
+        setFoundUser(response.data.user);
+        setMessage({ type: 'success', text: `Found user: ${response.data.user.full_name}` });
+      } else {
+        setFoundUser(null);
+        setMessage({ type: 'error', text: response.data.error || 'User not found' });
+      }
+    } catch (error) {
+      setFoundUser(null);
+      setMessage({ type: 'error', text: 'Error searching for user: ' + (error.response?.data?.error || error.message) });
+    } finally {
+      setSearchingUser(false);
+    }
+  };
+
+  const handleIndividualEmailSubmit = async (e) => {
+    e.preventDefault();
+    if (!foundUser) {
+      setMessage({ type: 'error', text: 'Please find a user first' });
+      return;
+    }
+    
+    if (!individualData.subject.trim() || !individualData.message.trim()) {
+      setMessage({ type: 'error', text: 'Subject and message are required' });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await adminAPI.sendIndividualEmail({
+        user_id: foundUser.id,
+        subject: individualData.subject,
+        message: individualData.message
+      });
+      
+      setMessage({ 
+        type: 'success', 
+        text: response.data.message || 'Email sent successfully!'
+      });
+      
+      // Reset form
+      setIndividualData({
+        erf_number: '',
+        subject: '',
+        message: ''
+      });
+      setFoundUser(null);
+      
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to send email: ' + (error.response?.data?.error || error.message) });
     } finally {
       setLoading(false);
     }
@@ -212,7 +286,7 @@ const AdminCommunication = () => {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              📧 Email Communication
+              📧 Bulk Email
             </button>
             <button
               onClick={() => setActiveTab('whatsapp')}
@@ -222,7 +296,17 @@ const AdminCommunication = () => {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              💬 WhatsApp Communication
+              💬 Bulk WhatsApp
+            </button>
+            <button
+              onClick={() => setActiveTab('individual')}
+              className={`py-4 px-6 border-b-2 font-medium text-sm ${
+                activeTab === 'individual'
+                  ? 'border-purple-500 text-purple-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              🎯 Individual Message
             </button>
           </nav>
         </div>
@@ -380,6 +464,135 @@ const AdminCommunication = () => {
               </div>
             </form>
           )}
+
+          {/* Individual Communication Tab */}
+          {activeTab === 'individual' && (
+            <div className="space-y-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Send Individual Message by ERF Number</h3>
+              
+              {/* ERF Number Search */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex gap-4 items-end">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      ERF Number
+                    </label>
+                    <input
+                      type="text"
+                      value={individualData.erf_number}
+                      onChange={(e) => setIndividualData(prev => ({ ...prev, erf_number: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="Enter ERF number (e.g., 27681)"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleFindUser}
+                    disabled={searchingUser || !individualData.erf_number.trim()}
+                    className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {searchingUser ? '🔍 Searching...' : '🔍 Find User'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Found User Display */}
+              {foundUser && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                  <h4 className="font-medium text-purple-900 mb-2">✅ User Found:</h4>
+                  <div className="text-sm text-purple-700 space-y-1">
+                    <p><strong>Name:</strong> {foundUser.full_name}</p>
+                    <p><strong>Email:</strong> {foundUser.email || 'No email address'}</p>
+                    <p><strong>Phone:</strong> {foundUser.phone || 'No phone number'}</p>
+                    <p><strong>ERF:</strong> {foundUser.erf_number}</p>
+                    <p><strong>Type:</strong> {foundUser.type === 'resident' ? '🏠 Resident' : '🏡 Owner'}</p>
+                  </div>
+                  {!foundUser.email && (
+                    <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
+                      ⚠️ This user does not have an email address on file.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Email Form */}
+              {foundUser && foundUser.email && (
+                <form onSubmit={handleIndividualEmailSubmit} className="space-y-4">
+                  {/* Subject */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Subject *
+                    </label>
+                    <input
+                      type="text"
+                      value={individualData.subject}
+                      onChange={(e) => setIndividualData(prev => ({ ...prev, subject: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="Enter email subject..."
+                      maxLength={200}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">{individualData.subject.length}/200 characters</p>
+                  </div>
+
+                  {/* Message */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Message *
+                    </label>
+                    <textarea
+                      value={individualData.message}
+                      onChange={(e) => setIndividualData(prev => ({ ...prev, message: e.target.value }))}
+                      rows={8}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      placeholder="Enter your message here..."
+                      maxLength={5000}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">{individualData.message.length}/5000 characters</p>
+                  </div>
+
+                  {/* Preview */}
+                  {individualData.subject && individualData.message && foundUser && (
+                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-md">
+                      <h4 className="font-medium text-gray-900 mb-2">Preview:</h4>
+                      <div className="text-sm">
+                        <p><strong>To:</strong> {foundUser.full_name} ({foundUser.email})</p>
+                        <p><strong>ERF:</strong> {foundUser.erf_number}</p>
+                        <p><strong>Subject:</strong> {individualData.subject}</p>
+                        <div className="mt-2 p-2 bg-white border border-purple-200 rounded">
+                          <p className="whitespace-pre-wrap">{individualData.message}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Send Button */}
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm text-gray-600">
+                      This will send to <strong>{foundUser.full_name}</strong>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading || !individualData.subject.trim() || !individualData.message.trim()}
+                      className="bg-purple-600 text-white px-6 py-2 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? '📤 Sending...' : '📧 Send Email'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Instructions */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-900 mb-2">📝 How to use Individual Communication:</h4>
+                <div className="text-sm text-blue-700 space-y-1">
+                  <p>1. Enter the ERF number to search for the property owner/resident</p>
+                  <p>2. Review the found user details to confirm it's the correct person</p>
+                  <p>3. Compose your email with a clear subject and message</p>
+                  <p>4. Review the preview and send the individual message</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -387,8 +600,9 @@ const AdminCommunication = () => {
       <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
         <h3 className="text-lg font-medium text-yellow-800 mb-3">📋 Communication Guidelines</h3>
         <div className="text-sm text-yellow-700 space-y-2">
-          <p>• <strong>Email:</strong> Best for detailed announcements, documents, and formal communications</p>
-          <p>• <strong>WhatsApp:</strong> Best for urgent updates, short notices, and quick community alerts</p>
+          <p>• <strong>Bulk Email:</strong> Best for detailed announcements, documents, and formal communications to groups</p>
+          <p>• <strong>Bulk WhatsApp:</strong> Best for urgent updates, short notices, and quick community alerts to groups</p>
+          <p>• <strong>Individual Messages:</strong> Perfect for personal communication using ERF numbers as reference</p>
           <p>• <strong>Recipients:</strong> 'All Users' includes both residents and owners, use specific groups when needed</p>
           <p>• <strong>Privacy:</strong> Always respect resident privacy and only send relevant community information</p>
           <p>• <strong>Frequency:</strong> Avoid over-communication to prevent message fatigue</p>

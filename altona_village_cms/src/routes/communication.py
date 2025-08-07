@@ -1,9 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from src.models.user import User, Resident, db
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+from src.models.user import User, Resident, Owner, db
+from src.utils.email_service import send_custom_email
 import os
 
 communication_bp = Blueprint('communication', __name__)
@@ -27,20 +25,39 @@ def send_bulk_email():
         data = request.get_json()
         subject = data.get('subject')
         message = data.get('message')
-        recipient_type = data.get('recipient_type', 'all')  # 'all', 'owners', 'tenants'
+        recipient_type = data.get('recipient_type', 'all')  # 'all', 'owners', 'residents'
         
         if not subject or not message:
             return jsonify({'error': 'Subject and message are required'}), 400
         
+        print(f"[DEBUG] Sending bulk email - Type: {recipient_type}, Subject: {subject}")
+        
         # Get recipients based on type
-        query = User.query.join(Resident).filter(User.status == 'active', User.role == 'resident')
+        recipients = []
         
         if recipient_type == 'owners':
-            query = query.filter(Resident.is_owner == True)
-        elif recipient_type == 'tenants':
-            query = query.filter(Resident.is_owner == False)
+            # Get users who have owner records
+            recipients = db.session.query(User).join(Owner).filter(
+                User.status == 'active',
+                User.email.isnot(None),
+                User.email != ''
+            ).all()
+        elif recipient_type == 'residents':
+            # Get users who have resident records
+            recipients = db.session.query(User).join(Resident).filter(
+                User.status == 'active',
+                User.email.isnot(None),
+                User.email != ''
+            ).all()
+        else:  # 'all' or any other value
+            # Get all active users with email addresses
+            recipients = User.query.filter(
+                User.status == 'active',
+                User.email.isnot(None),
+                User.email != ''
+            ).all()
         
-        recipients = query.all()
+        print(f"[DEBUG] Found {len(recipients)} recipients")
         
         if not recipients:
             return jsonify({'error': 'No recipients found'}), 404
@@ -50,19 +67,42 @@ def send_bulk_email():
         
         for user in recipients:
             try:
-                send_email_via_service(user.email, subject, message)
-                sent_count += 1
+                print(f"[DEBUG] Sending email to: {user.email}")
+                success, error_msg = send_custom_email(
+                    to_email=user.email,
+                    subject=subject,
+                    message=message,
+                    recipient_name=user.get_full_name()
+                )
+                if success:
+                    sent_count += 1
+                    print(f"[DEBUG] ✅ Email sent to {user.email}")
+                else:
+                    print(f"[DEBUG] ❌ Failed to send to {user.email}: {error_msg}")
+                    failed_emails.append({
+                        'email': user.email,
+                        'error': error_msg
+                    })
             except Exception as e:
-                failed_emails.append(user.email)
+                print(f"[DEBUG] ❌ Exception sending to {user.email}: {str(e)}")
+                failed_emails.append({
+                    'email': user.email,
+                    'error': str(e)
+                })
         
-        return jsonify({
+        result = {
             'message': f'Email sent successfully to {sent_count} recipients',
             'sent_count': sent_count,
             'failed_count': len(failed_emails),
             'failed_emails': failed_emails
-        }), 200
+        }
+        print(f"[DEBUG] Bulk email result: {result}")
+        return jsonify(result), 200
         
     except Exception as e:
+        print(f"[ERROR] Bulk email error: {str(e)}")
+        import traceback
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @communication_bp.route('/send-whatsapp', methods=['POST'])
@@ -197,29 +237,6 @@ def get_communication_statistics():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def send_email_via_service(to_email, subject, message):
-    smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-    smtp_port = int(os.getenv('SMTP_PORT', '587'))
-    smtp_username = "vonlandsbergjohn@gmail.com"  # Hardcoded sender
-    smtp_password = os.getenv('SMTP_PASSWORD')    # Set this in your .env or environment
-
-    if not smtp_username or not smtp_password:
-        raise Exception('SMTP credentials not configured')
-
-    msg = MIMEMultipart()
-    msg['From'] = smtp_username
-    msg['To'] = to_email
-    msg['Subject'] = subject
-    msg['Reply-To'] = "altonavillagehoa@gmail.com, lynette@sir-worcester.co.za"
-
-    msg.attach(MIMEText(message, 'plain'))
-
-    server = smtplib.SMTP(smtp_server, smtp_port)
-    server.starttls()
-    server.login(smtp_username, smtp_password)
-    text = msg.as_string()
-    server.sendmail(smtp_username, to_email, text)
-    server.quit()
 
 def send_whatsapp_via_api(phone_number, message):
     """
@@ -231,3 +248,218 @@ def send_whatsapp_via_api(phone_number, message):
     """
     # Example implementation would make HTTP requests to WhatsApp API
     pass
+
+
+@communication_bp.route('/stats', methods=['GET'])
+@jwt_required()
+def get_communication_stats():
+    """Get communication statistics for the admin panel"""
+    try:
+        # Check if user is admin
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+            
+        print(f"[DEBUG] Starting communication stats query...")
+        
+        # Initialize default values
+        total_users = 0
+        residents = 0
+        owners = 0
+        active_emails = 0
+        active_phones = 0
+        
+        try:
+            # Count total users with email addresses
+            total_users = User.query.filter(
+                User.email.isnot(None), 
+                User.email != '',
+                User.status == 'active'
+            ).count()
+            print(f"[DEBUG] Total active users with emails: {total_users}")
+            
+            # Count users with residents records (joined properly)
+            residents = db.session.query(User).join(Resident).filter(
+                User.email.isnot(None), 
+                User.email != '',
+                User.status == 'active'
+            ).count()
+            print(f"[DEBUG] Active residents with emails: {residents}")
+            
+            # Count users with owners records (joined properly)
+            owners = db.session.query(User).join(Owner).filter(
+                User.email.isnot(None), 
+                User.email != '',
+                User.status == 'active'
+            ).count()
+            print(f"[DEBUG] Active owners with emails: {owners}")
+            
+            # Count active emails (same as total users)
+            active_emails = total_users
+            
+            # Count active phone numbers from both residents and owners tables
+            resident_phones = db.session.query(User).join(Resident).filter(
+                User.status == 'active',
+                Resident.phone_number.isnot(None), 
+                Resident.phone_number != ''
+            ).count()
+            
+            owner_phones = db.session.query(User).join(Owner).filter(
+                User.status == 'active',
+                Owner.phone_number.isnot(None), 
+                Owner.phone_number != ''
+            ).count()
+            
+            # Sum phone numbers (note: some users might be both residents and owners, so this might double-count)
+            active_phones = resident_phones + owner_phones
+            print(f"[DEBUG] Active phones - Residents: {resident_phones}, Owners: {owner_phones}, Total: {active_phones}")
+            
+        except Exception as db_error:
+            print(f"[WARNING] Database query failed, using default values: {str(db_error)}")
+            # Use default values if database queries fail
+            total_users = 0
+            residents = 0
+            owners = 0
+            active_emails = 0
+            active_phones = 0
+        
+        result = {
+            'total_users': total_users,
+            'residents': residents,
+            'owners': owners,
+            'active_emails': active_emails,
+            'active_phones': active_phones
+        }
+        print(f"[DEBUG] Stats result: {result}")
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"[ERROR] Error in get_communication_stats: {str(e)}")
+        import traceback
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Failed to get communication statistics'}), 500
+
+
+@communication_bp.route('/find-user-by-erf', methods=['POST'])
+@jwt_required()
+def find_user_by_erf():
+    """Find user by ERF number for individual communication"""
+    try:
+        # Check if user is admin
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+            
+        data = request.get_json()
+        erf_number = data.get('erf_number')
+        
+        if not erf_number:
+            return jsonify({'error': 'ERF number is required'}), 400
+            
+        print(f"[DEBUG] Searching for ERF: {erf_number}")
+        
+        # First check residents table
+        resident = db.session.query(Resident).filter_by(erf_number=erf_number).first()
+        if resident:
+            user = db.session.query(User).filter_by(id=resident.user_id).first()
+            if user:
+                print(f"[DEBUG] Found resident: {resident.first_name} {resident.last_name}")
+                return jsonify({
+                    'found': True,
+                    'user': {
+                        'id': user.id,
+                        'full_name': f"{resident.first_name} {resident.last_name}",
+                        'email': user.email,
+                        'phone': resident.phone_number,  # Get phone from resident record
+                        'erf_number': erf_number,
+                        'type': 'resident'
+                    }
+                })
+        
+        # Also check owners table
+        owner = db.session.query(Owner).filter_by(erf_number=erf_number).first()
+        if owner:
+            user = db.session.query(User).filter_by(id=owner.user_id).first()
+            if user:
+                print(f"[DEBUG] Found owner: {owner.first_name} {owner.last_name}")
+                return jsonify({
+                    'found': True,
+                    'user': {
+                        'id': user.id,
+                        'full_name': f"{owner.first_name} {owner.last_name}",
+                        'email': user.email,
+                        'phone': owner.phone_number,  # Get phone from owner record
+                        'erf_number': erf_number,
+                        'type': 'owner'
+                    }
+                })
+        
+        print(f"[DEBUG] No user found for ERF {erf_number}")
+        return jsonify({'found': False, 'error': f'No user found for ERF {erf_number}'})
+        
+    except Exception as e:
+        print(f"Error finding user by ERF: {str(e)}")
+        return jsonify({'error': 'Failed to find user'}), 500
+
+
+@communication_bp.route('/send-individual-email', methods=['POST'])
+@jwt_required()
+def send_individual_email():
+    """Send email to individual user"""
+    try:
+        # Check if user is admin
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+            
+        data = request.get_json()
+        user_id = data.get('user_id')
+        subject = data.get('subject')
+        message = data.get('message')
+        
+        if not all([user_id, subject, message]):
+            return jsonify({'error': 'User ID, subject, and message are required'}), 400
+            
+        # Get user details
+        user = db.session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+            
+        if not user.email:
+            return jsonify({'error': 'User does not have an email address'}), 400
+            
+        # Send email using the proven email service
+        try:
+            # Get user's full name safely
+            user_name = user.get_full_name() if hasattr(user, 'get_full_name') else user.email.split('@')[0]
+            
+            print(f"[DEBUG] Sending individual email to: {user.email}, Name: {user_name}")
+            success, error_msg = send_custom_email(
+                to_email=user.email,
+                subject=subject,
+                message=message,
+                recipient_name=user_name
+            )
+            if success:
+                print(f"[DEBUG] ✅ Individual email sent successfully to {user.email}")
+                return jsonify({
+                    'success': True,
+                    'message': f'Email sent successfully to {user_name}'
+                })
+            else:
+                print(f"[DEBUG] ❌ Failed to send individual email: {error_msg}")
+                return jsonify({'error': error_msg}), 500
+        except Exception as email_error:
+            print(f"[ERROR] Email sending error: {str(email_error)}")
+            import traceback
+            print(f"[ERROR] Traceback: {traceback.format_exc()}")
+            return jsonify({'error': f'Email sending failed: {str(email_error)}'}), 500
+        
+    except Exception as e:
+        print(f"[ERROR] Individual email error: {str(e)}")
+        import traceback
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Failed to send email'}), 500

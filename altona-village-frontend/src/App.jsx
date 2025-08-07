@@ -13,6 +13,7 @@ import AdminTransitionLinking from '@/components/AdminTransitionLinking';
 import AddressMappings from '@/components/AddressMappings';
 import GateRegister from '@/components/GateRegister';
 import PendingRegistrations from './components/PendingRegistrations';
+import AdminCommunication from '@/components/AdminCommunication';
 import ResidentDashboard from '@/components/ResidentDashboard';
 import ProfileManagement from '@/components/ProfileManagement';
 import VehicleManagement from '@/components/VehicleManagement';
@@ -114,7 +115,7 @@ const Router = () => {
         case '/admin/address-mappings':
           return <AddressMappings />;
         case '/admin/communication':
-          return <div>Communication Tools (Coming Soon)</div>;
+          return <AdminCommunication />;
         default:
           return <AdminDashboard />;
       }

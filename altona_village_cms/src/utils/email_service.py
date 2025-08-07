@@ -378,3 +378,83 @@ def send_transition_status_update(to_email, user_name, erf_number, old_status, n
         error_msg = f"Error sending transition status update: {str(e)}"
         print(f"[EMAIL ERROR] {error_msg}")
         return False, error_msg
+
+
+def send_custom_email(to_email, subject, message, recipient_name=None):
+    """
+    Send a custom email using the same configuration as registration emails
+    Returns: (success: bool, error_message: str)
+    """
+    try:
+        # Email configuration from environment variables
+        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+        smtp_port = int(os.getenv('SMTP_PORT', '587'))
+        from_email = os.getenv('FROM_EMAIL')
+        from_password = os.getenv('EMAIL_PASSWORD')
+        
+        # Validate email configuration
+        if not from_email or not from_password:
+            error_msg = "Email configuration missing. Please set FROM_EMAIL and EMAIL_PASSWORD in .env file"
+            print(f"[EMAIL ERROR] {error_msg}")
+            return False, error_msg
+        
+        if from_email == 'vonlandsbergjohn@gmail.com' and from_password == 'your-gmail-app-password-here':
+            error_msg = "Please update .env file with your actual Gmail App Password"
+            print(f"[EMAIL ERROR] {error_msg}")
+            return False, error_msg
+        
+        # Create message
+        msg = MIMEMultipart()
+        msg['From'] = from_email
+        msg['To'] = to_email
+        msg['Subject'] = subject
+        
+        # Add reply-to for community communications
+        msg['Reply-To'] = "altonavillagehoa@gmail.com, lynette@sir-worcester.co.za"
+        
+        # Create email body with community branding
+        greeting = f"Dear {recipient_name}," if recipient_name else "Dear Resident,"
+        
+        body = f"""
+{greeting}
+
+{message}
+
+Best regards,
+Altona Village Management Team
+
+---
+This is a message from the Altona Village Community Management System.
+For any questions or concerns, please contact us at altonavillagehoa@gmail.com
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        # Send email using the same method as registration emails
+        print(f"[EMAIL] Connecting to {smtp_server}:{smtp_port}")
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        print(f"[EMAIL] Logging in as {from_email}")
+        
+        # Try different authentication methods like in approval email
+        try:
+            server.login(from_email, from_password)
+        except smtplib.SMTPAuthenticationError as auth_error:
+            print(f"[EMAIL ERROR] Authentication failed: {auth_error}")
+            # Try with explicit AUTH LOGIN
+            server.ehlo()
+            server.login(from_email, from_password)
+        
+        text = msg.as_string()
+        print(f"[EMAIL] Sending custom email to {to_email}")
+        server.sendmail(from_email, to_email, text)
+        server.quit()
+        
+        success_msg = f"Custom email sent successfully to {to_email}"
+        print(f"[EMAIL SUCCESS] {success_msg}")
+        return True, success_msg
+        
+    except Exception as e:
+        error_msg = f"Error sending custom email to {to_email}: {str(e)}"
+        print(f"[EMAIL ERROR] {error_msg}")
+        return False, error_msg
