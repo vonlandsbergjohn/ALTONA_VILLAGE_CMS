@@ -623,4 +623,7 @@ def get_change_stats():
         return jsonify({'error': f'Failed to get stats: {str(e)}'}), 500
 
 # Initialize the change tracking table when the module is imported
-init_change_tracking_table()
+import os
+if os.getenv("ENABLE_CHANGE_TRACKING", "false").lower() == "true":
+    init_change_tracking_table()
+
