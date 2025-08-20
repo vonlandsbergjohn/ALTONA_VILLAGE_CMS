@@ -10,11 +10,11 @@ services:
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://your-frontend-domain.com,http://localhost:5173
+        value: https://altona-village-frontend.onrender.com,http://localhost:5173
     autoDeploy: true
 
-  - type: static_site
-    name: altona-village-frontend
+staticSites:
+  - name: altona-village-frontend
     rootDir: altona-village-frontend
     buildCommand: npm ci && npm run build
     publishPath: dist
