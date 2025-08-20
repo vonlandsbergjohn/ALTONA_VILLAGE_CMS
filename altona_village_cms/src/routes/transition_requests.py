@@ -1,6 +1,8 @@
-from flask import Blueprint  # plus your other imports
+from flask import Blueprint, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from src.models import User  # adjust import path if needed
 
-# define the blueprint before any @transition_bp.route decorators
+# define the blueprint
 transition_bp = Blueprint("transition_requests", __name__)
 # --- NEW ADMIN ENDPOINT: Find and Link Transition Requests for Same ERF (Owner <-> Tenant) ---
 @transition_bp.route('/admin/link-existing-requests', methods=['POST'])
