@@ -1,19 +1,22 @@
 services:
   - type: web
-    name: altona-village-cms
-    runtime: python3
-    plan: free
-    buildCommand: |
-      cd altona-village-frontend && npm ci && npm run build
-      cp -r altona-village-frontend/dist/* altona_village_cms/src/static/
-    startCommand: cd altona_village_cms && python -m gunicorn --bind 0.0.0.0:$PORT src.main:app
+    name: altona-village-backend
+    env: python
+    buildCommand: pip install -r requirements.txt || pip install -r altona_village_cms/requirements.txt
+    startCommand: gunicorn "altona_village_cms.src.main:app" --workers=2 --timeout=120 -b 0.0.0.0:$PORT
     envVars:
-      - key: FLASK_ENV
-        value: production
       - key: SECRET_KEY
         generateValue: true
       - key: JWT_SECRET_KEY
         generateValue: true
-      - key: PYTHON_VERSION
-        value: 3.11.8
-    healthCheckPath: /api/admin/system-status
+      - key: CORS_ORIGINS
+        value: https://your-frontend-domain.com,https://altona-village-frontend.onrender.com
+    autoDeploy: true
+
+  - type: static
+    name: altona-village-frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: altona-village-frontend/dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://altona-village-backend.onrender.com/api
