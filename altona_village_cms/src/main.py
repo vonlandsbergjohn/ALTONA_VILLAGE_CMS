@@ -49,6 +49,8 @@ app.register_blueprint(public_bp, url_prefix='/api/public')
 app.register_blueprint(user_management_bp, url_prefix='/api')
 
 # Database configuration
+from src.routes.transition_linking import transition_linking_bp
+
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
@@ -56,6 +58,7 @@ db.init_app(app)
 # Create tables and default admin user
 with app.app_context():
     db.create_all()
+    app.register_blueprint(transition_linking_bp)
     
     # Create default admin user if it doesn't exist
     from src.models.user import User
