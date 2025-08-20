@@ -2,7 +2,7 @@
 
 ## Overview
 
-This system tracks critical resident data changes and provides admin notifications for external system synchronization. It's specifically designed to help estate management teams keep their **Accentronix gate system** and **camera identification system** up-to-date with resident information.
+This system tracks critical and important resident data changes and provides admin notifications for external system synchronization. It's specifically designed to help estate management teams keep their **Accentronix gate system** and **camera identification system** up-to-date with resident information.
 
 ## 🎯 Problem Solved
 
