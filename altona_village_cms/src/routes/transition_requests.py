@@ -1,7 +1,5 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from src.models import User  # adjust import path if needed
-
 # define the blueprint
 transition_bp = Blueprint("transition_requests", __name__)
 # --- NEW ADMIN ENDPOINT: Find and Link Transition Requests for Same ERF (Owner <-> Tenant) ---
