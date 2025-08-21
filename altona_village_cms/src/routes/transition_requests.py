@@ -1,8 +1,16 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-# define the blueprint
-transition_bp = Blueprint("transition_requests", __name__)
-# --- NEW ADMIN ENDPOINT: Find and Link Transition Requests for Same ERF (Owner <-> Tenant) ---
+
+# Define ONE blueprint (main.py registers this at /api/transition)
+transition_bp = Blueprint("transition", __name__)
+
+# Lazy import helper to avoid circular imports at module import time
+def _models():
+    from src.models.user import (
+        db, User, Resident, Owner, UserTransitionRequest,
+        TransitionRequestUpdate, TransitionVehicle, Vehicle
+    )
+    return db, User, Resident, Owner, UserTransitionRequest, TransitionRequestUpdate, TransitionVehicle, Vehicle
 @transition_bp.route('/admin/link-existing-requests', methods=['POST'])
 @jwt_required()
 def link_existing_transition_requests():
