@@ -37,6 +37,7 @@ def create_app() -> Flask:
     # ---- Secrets & core config ---------------------------------------------
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "asdf#FGSgvasgf$5$WGT")
     app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "jwt-secret-string-change-in-production")
+    app.config["BOOTSTRAP_KEY"] = os.environ.get("BOOTSTRAP_KEY", "")
 
     # Database
     db_url = _normalize_database_url(os.environ.get("DATABASE_URL"))
@@ -122,6 +123,15 @@ def create_app() -> Flask:
         app.register_blueprint(admin_notifications, url_prefix="/api")
     except Exception as e:
         app.logger.exception("Failed to register admin_notifications: %s", e)
+
+    # Optional bootstrap route for admin repair (only if BOOTSTRAP_KEY is set)
+    try:
+        if app.config.get("BOOTSTRAP_KEY"):
+            from src.routes.bootstrap_admin import bootstrap_bp
+            app.register_blueprint(bootstrap_bp)  # route file defines its own paths
+            app.logger.info("bootstrap_admin route ENABLED")
+    except Exception as e:
+        app.logger.exception("Failed to register bootstrap_admin bp: %s", e)
 
     try:
         from src.routes.transition_requests import transition_bp
