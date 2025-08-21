@@ -87,12 +87,9 @@ Following the same pattern as the complaint system
 
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models.user import db, User, Resident, Owner, UserTransitionRequest, TransitionRequestUpdate, TransitionVehicle, Vehicle
 from ..routes.admin_notifications import log_user_change
 from datetime import datetime, date
 import uuid
-
-transition_bp = Blueprint('transition', __name__)
 
 def perform_user_migration(transition_request):
     """
