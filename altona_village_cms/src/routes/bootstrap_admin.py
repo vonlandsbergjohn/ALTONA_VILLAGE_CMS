@@ -7,13 +7,23 @@ bootstrap_bp = Blueprint("bootstrap", __name__)
 
 @bootstrap_bp.route("/api/_bootstrap_admin", methods=["POST"])
 def bootstrap_admin():
-    # Require a secret header so only you can call it
-    if request.headers.get("X-Setup-Key") != current_app.config.get("BOOTSTRAP_KEY"):
+    # Read expected key from config
+    expected = (current_app.config.get("BOOTSTRAP_KEY") or "").strip()
+
+    # Accept the provided key from header, query, or JSON body (any one)
+    payload = request.get_json(silent=True) or {}
+    provided = (
+        request.headers.get("X-Setup-Key")
+        or request.args.get("key")
+        or payload.get("setup_key")
+        or ""
+    ).strip()
+
+    if not expected or provided != expected:
         return jsonify({"error": "unauthorized"}), 401
 
-    data = request.get_json(force=True) or {}
-    email = data.get("email")
-    password = data.get("password")
+    email = payload.get("email")
+    password = payload.get("password")
     if not email or not password:
         return jsonify({"error": "email and password required"}), 400
 
@@ -25,7 +35,7 @@ def bootstrap_admin():
 
     for u in users:
         u.role = "admin"
-        # Set every approval/active flag your model might have
+        # Flip every likely approval/active flag
         if hasattr(u, "status"): u.status = "active"
         if hasattr(u, "is_active"): u.is_active = True
         if hasattr(u, "approved"): u.approved = True
