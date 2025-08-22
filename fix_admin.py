@@ -1,37 +1,49 @@
-# fix_admin.py
-import os, sys, getpass
-# make "altona_village_cms/src" importable
-ROOT = os.path.dirname(__file__)
-sys.path.insert(0, os.path.join(ROOT, "altona_village_cms"))
-sys.path.insert(0, os.path.join(ROOT, "altona_village_cms", "src"))
+# fix_admin.py (run from your repo root)
+import os
+import argparse
+from getpass import getpass
 
+# Import your Flask app factory
 from altona_village_cms.src.main import create_app
-from altona_village_cms.src.models.user import db, User
-from werkzeug.security import generate_password_hash
 
-app = create_app()
-with app.app_context():
-    email = input("Admin email: ").strip().lower()
-    pwd = getpass.getpass("Admin password: ").strip()
+# Import your models/db (these rely on the app context)
+from src.models.user import db, User
 
-    u = User.query.filter_by(email=email).first()
-    created = False
-    if not u:
-        u = User(email=email)
-        db.session.add(u)
-        created = True
 
-    u.password_hash = generate_password_hash(pwd)
-    u.role = "admin"
-    for field, value in [
-        ("status", "active"),
-        ("is_active", True),
-        ("approved", True),
-        ("is_approved", True),
-        ("approval_status", "approved"),
-    ]:
-        if hasattr(u, field):
-            setattr(u, field, value)
+def ensure_admin(email: str, password: str):
+    app = create_app()
+    with app.app_context():
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            # Create new admin
+            user = User(email=email, role="admin", status="active")
+            user.set_password(password)
+            db.session.add(user)
+            db.session.commit()
+            print(f"[OK] Created admin user: {email}")
+        else:
+            # Update existing user to admin/active and set password
+            user.role = "admin"
+            user.status = "active"
+            if password:
+                user.set_password(password)
+            db.session.commit()
+            print(f"[OK] Updated existing user to admin/active: {email}")
 
-    db.session.commit()
-    print(f"✅ {'Created' if created else 'Updated'} admin:", email)
+        print(f"-> id={user.id}  role={user.role}  status={user.status}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Create or repair the admin user")
+    parser.add_argument("--email", default=os.environ.get("ADMIN_EMAIL"), help="Admin email")
+    parser.add_argument("--password", default=os.environ.get("ADMIN_PASSWORD"), help="Admin password")
+
+    args = parser.parse_args()
+
+    email = args.email or input("Admin email: ").strip()
+    password = args.password or getpass("Admin password: ").strip()
+
+    if not email or not password:
+        raise SystemExit("Email and password are required.")
+
+    ensure_admin(email, password)

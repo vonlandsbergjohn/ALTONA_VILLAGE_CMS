@@ -57,9 +57,11 @@ def create_app() -> Flask:
     app.config["UPLOAD_FOLDER"] = upload_dir
 
     # ---- Extensions ---------------------------------------------------------
+    cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")
+    cors_origins = [o.strip() for o in cors_origins_raw.split(",")] if cors_origins_raw else ["*"]
     CORS(
         app,
-        resources={r"/api/*": {"origins": os.environ.get("CORS_ORIGINS", "*").split(",")}},
+        resources={r"/api/*": {"origins": cors_origins}},
         supports_credentials=True,
     )
     JWTManager(app)
@@ -124,7 +126,8 @@ def create_app() -> Flask:
     except Exception as e:
         app.logger.exception("Failed to register admin_notifications: %s", e)
 
-    # Optional bootstrap route for admin repair (only if BOOTSTRAP_KEY is set)
+    # Optional admin bootstrap/repair route:
+    # Only enabled when BOOTSTRAP_KEY is set (prevents random usage).
     try:
         if app.config.get("BOOTSTRAP_KEY"):
             from src.routes.bootstrap_admin import bootstrap_bp
