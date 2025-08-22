@@ -4,7 +4,6 @@ import Layout from '@/components/Layout';
 import LoginForm from '@/components/LoginForm';
 import RegisterForm from '@/components/RegisterForm';
 import AdminDashboard from '@/components/AdminDashboard';
-// import SimpleTest from '@/components/SimpleTest';
 import AdminComplaints from '@/components/AdminComplaints';
 import AdminResidents from '@/components/AdminResidents';
 import AdminNotificationsDashboard from '@/components/AdminNotificationsDashboard';
@@ -26,23 +25,23 @@ import './App.css';
 
 // Simple router component
 const Router = () => {
-  const { user, loading, isAuthenticated, isAdmin, isResident, canAccessVehicles } = useAuth();
+  // NOTE: do NOT pull isAdmin here; we compute it ourselves from user.role
+  const { user, loading, isAuthenticated, isResident, canAccessVehicles } = useAuth();
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [showRegister, setShowRegister] = useState(false);
 
   useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
-    };
-
+    const handlePopState = () => setCurrentPath(window.location.pathname);
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Navigate function
   const navigate = (path) => {
-    window.history.pushState({}, '', path);
-    setCurrentPath(path);
+    if (path !== window.location.pathname) {
+      window.history.pushState({}, '', path);
+      setCurrentPath(path);
+    }
   };
 
   if (loading) {
@@ -61,14 +60,28 @@ const Router = () => {
     return <LoginForm onSwitchToRegister={() => setShowRegister(true)} />;
   }
 
-  // Account not activated (but allow admins)
-  if (user?.status !== 'active' && user?.role !== 'admin') {
+  // --------------------------------------------------------------------
+  // Account gating: allow admins through even if not yet "active/approved"
+  // --------------------------------------------------------------------
+  const user2 = user || {};
+  const role   = (user2.role   ?? '').toLowerCase();
+  const status = (user2.status ?? '').toLowerCase();
+
+  const isAdmin = role === 'admin';
+  const isActive = status === 'active';
+  const isApproved =
+    user2.approval_status === 'approved' ||
+    user2.is_approved === true ||
+    user2.approved === true;
+
+  // Show "pending approval" ONLY when NOT admin and also NOT active/approved
+  if (!(isAdmin || isActive || isApproved)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">Account Pending Approval</h1>
           <p className="text-gray-600 mb-4">
-            Your account is awaiting approval from the estate management.
+            Your account is <span className="font-semibold">awaiting approval</span> from the estate management.
           </p>
           <p className="text-gray-600">
             You will receive an email notification once your account is approved.
@@ -132,9 +145,7 @@ const Router = () => {
           return <MyProperty />;
         case '/resident/vehicles':
           // Allow both residents and owners to access vehicles
-          if (canAccessVehicles) {
-            return <VehicleManagement />;
-          }
+          if (canAccessVehicles) return <VehicleManagement />;
           break;
         case '/resident/complaints':
           return <MyComplaints />;
@@ -152,11 +163,7 @@ const Router = () => {
     return <div>Page not found</div>;
   };
 
-  return (
-    <Layout>
-      {renderRoute()}
-    </Layout>
-  );
+  return <Layout>{renderRoute()}</Layout>;
 };
 
 function App() {
