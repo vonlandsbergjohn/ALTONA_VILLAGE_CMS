@@ -8,6 +8,114 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- 🔵 Fetch shim: always add Authorization header for backend API calls,
+         and store token after /api/auth/login -->
+    <script>
+      (function () {
+        const API = 'https://altona-village-backend.onrender.com';
+        const origFetch = window.fetch;
+
+        function looksJWT(v) {
+          return typeof v === 'string' && v.split('.').length === 3;
+        }
+
+        function pickTokenFromObj(obj) {
+          if (!obj || typeof obj !== 'object') return null;
+          const direct = obj.token || obj.access_token || obj.jwt || obj.key || obj.authToken || null;
+          if (typeof direct === 'string') return direct;
+          if (obj.user && typeof obj.user === 'object') {
+            const u = obj.user;
+            const nested = u.token || u.access_token || u.jwt || u.key || u.authToken || null;
+            if (typeof nested === 'string') return nested;
+          }
+          return null;
+        }
+
+        function storeToken(token) {
+          if (!token) return;
+          try {
+            localStorage.setItem('access_token', String(token));
+          } catch {}
+        }
+
+        function findToken() {
+          // 1) common direct keys
+          const keys = ['access_token', 'token', 'jwt', 'key', 'authToken'];
+          for (const k of keys) {
+            const v = localStorage.getItem(k) || sessionStorage.getItem(k);
+            if (v && (looksJWT(v) || v.startsWith('ey'))) return v.replace(/^Bearer\s+/i, '');
+          }
+          // 2) scan JSON blobs in storage
+          for (const storage of [localStorage, sessionStorage]) {
+            for (let i = 0; i < storage.length; i++) {
+              const k = storage.key(i);
+              try {
+                const raw = storage.getItem(k);
+                if (!raw) continue;
+                if (looksJWT(raw)) return raw;
+                const obj = JSON.parse(raw);
+                const fromObj = pickTokenFromObj(obj);
+                if (fromObj) return String(fromObj).replace(/^Bearer\s+/i, '');
+              } catch {}
+            }
+          }
+          // 3) cookies
+          const parts = document.cookie.split('; ').filter(Boolean);
+          for (const p of parts) {
+            const i = p.indexOf('=');
+            const val = decodeURIComponent(p.slice(i + 1));
+            if (looksJWT(val)) return val;
+            try {
+              const obj = JSON.parse(val);
+              const fromObj = pickTokenFromObj(obj);
+              if (fromObj) return String(fromObj).replace(/^Bearer\s+/i, '');
+            } catch {}
+          }
+          return null;
+        }
+
+        window.fetch = function (input, init) {
+          const url = typeof input === 'string' ? input : (input && input.url) || '';
+
+          // Attach Authorization for backend API calls
+          try {
+            if (url && url.startsWith(API + '/api/')) {
+              init = init || {};
+              const headers = new Headers(init.headers || {});
+              if (!headers.has('Authorization')) {
+                const token = findToken();
+                if (token) {
+                  headers.set('Authorization', 'Bearer ' + token);
+                  init.headers = headers;
+                }
+              }
+            }
+          } catch {}
+
+          // Call the real fetch
+          const p = origFetch(input, init);
+
+          // If it's the login endpoint, capture the token and persist it
+          try {
+            if (url && url.startsWith(API + '/api/auth/login')) {
+              p.then(async (res) => {
+                try {
+                  const clone = res.clone();
+                  const data = await clone.json();
+                  const tok = data.token || data.access_token || data.jwt || data.key;
+                  if (tok) storeToken(tok);
+                } catch {}
+              }).catch(() => {});
+            }
+          } catch {}
+
+          return p;
+        };
+      })();
+    </script>
+
+    <!-- Your app bundle (keep this after the shim) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
