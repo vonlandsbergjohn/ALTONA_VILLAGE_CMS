@@ -8,7 +8,7 @@ const PendingRegistrations = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/admin/pending-registrations', {
+    fetch('https://altona-village-backend.onrender.com/api/admin/pending-registrations', {
       headers: {
         Authorization: `Bearer ${getToken()}`
       }

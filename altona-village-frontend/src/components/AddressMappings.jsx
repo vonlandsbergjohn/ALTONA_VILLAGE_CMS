@@ -35,7 +35,7 @@ const AddressMappings = () => {
   const loadMappings = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/address-mappings', {
+      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/address-mappings', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -88,7 +88,7 @@ const AddressMappings = () => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/admin/address-mappings/upload', {
+      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/address-mappings/upload', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -124,7 +124,7 @@ const AddressMappings = () => {
   const downloadTemplate = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/address-mappings/template', {
+      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/address-mappings/template', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -151,7 +151,7 @@ const AddressMappings = () => {
   const downloadCurrentData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/address-mappings/export', {
+      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/address-mappings/export', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -188,7 +188,7 @@ const AddressMappings = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/address-mappings/clear', {
+      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/address-mappings/clear', {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

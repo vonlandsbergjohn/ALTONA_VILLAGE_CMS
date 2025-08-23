@@ -52,7 +52,7 @@ const AdminTransitionRequests = () => {
   const fetchRequests = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/transition/admin/requests', {
+      const response = await fetch('https://altona-village-backend.onrender.com/api/transition/admin/requests', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

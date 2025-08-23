@@ -47,7 +47,7 @@ const AdminDashboard = () => {
         adminAPI.getGateRegister(),
         adminAPI.getPendingRegistrations(),
         adminAPI.getAllComplaints(),
-        fetch('/api/transition/admin/requests', {
+        fetch('https://altona-village-backend.onrender.com/api/transition/admin/requests', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
             'Content-Type': 'application/json'
@@ -98,8 +98,8 @@ const AdminDashboard = () => {
       };
 
       const [statsRes, criticalRes] = await Promise.all([
-        fetch('/api/admin/changes/stats', { headers }),
-        fetch('/api/admin/changes/critical', { headers })
+        fetch('https://altona-village-backend.onrender.com/api/admin/changes/stats', { headers }),
+        fetch('https://altona-village-backend.onrender.com/api/admin/changes/critical', { headers })
       ]);
 
       if (statsRes.ok) {

@@ -49,7 +49,7 @@ const MyTransitionRequests = () => {
     try {
       setRefreshing(true);
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/transition/requests', {
+      const response = await fetch('https://altona-village-backend.onrender.com/api/transition/requests', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
