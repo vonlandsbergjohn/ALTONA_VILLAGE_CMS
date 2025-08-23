@@ -23,12 +23,70 @@ import MyTransitionRequests from '@/components/MyTransitionRequests';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import './App.css';
 
+// 🔵 backend base (absolute URL so it doesn't hit the SPA routes)
+const API = 'https://altona-village-backend.onrender.com';
+
+// Try a few common keys where the token might be stored
+function getStoredToken() {
+  const keys = [
+    'token',
+    'access_token',
+    'jwt',
+    'key',
+    'authToken',
+  ];
+  for (const k of keys) {
+    const v = window.localStorage.getItem(k) || window.sessionStorage.getItem(k);
+    if (v) return v.replace(/^Bearer\s+/i, '');
+  }
+  return null;
+}
+
 // Simple router component
 const Router = () => {
-  // NOTE: do NOT pull isAdmin here; we compute it ourselves from user.role
+  // NOTE: do NOT pull isAdmin here; compute from role
   const { user, loading, isAuthenticated, isResident, canAccessVehicles } = useAuth();
+
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
   const [showRegister, setShowRegister] = useState(false);
+
+  // ⇒ New: keep a copy of the live profile from the backend
+  const [profile, setProfile] = useState(null);
+  const [checkingProfile, setCheckingProfile] = useState(false);
+
+  // Load live profile if we’re authenticated but don’t have role/status yet
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const hasRoleStatus = !!(user && (user.role || user.status));
+    if (hasRoleStatus || checkingProfile || profile) return;
+
+    const token =
+      (user && (user.token || user.access_token || user.jwt || user.key)) ||
+      getStoredToken();
+
+    if (!token) return;
+
+    (async () => {
+      try {
+        setCheckingProfile(true);
+        const res = await fetch(`${API}/api/auth/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setProfile(data);
+        } else {
+          // if unauthorized, let normal auth flow handle it
+          setProfile(null);
+        }
+      } catch {
+        setProfile(null);
+      } finally {
+        setCheckingProfile(false);
+      }
+    })();
+  }, [isAuthenticated, user, checkingProfile, profile]);
 
   useEffect(() => {
     const handlePopState = () => setCurrentPath(window.location.pathname);
@@ -44,7 +102,7 @@ const Router = () => {
     }
   };
 
-  if (loading) {
+  if (loading || (isAuthenticated && checkingProfile && !profile && !(user && (user.role || user.status)))) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -61,18 +119,19 @@ const Router = () => {
   }
 
   // --------------------------------------------------------------------
-  // Account gating: allow admins through even if not yet "active/approved"
+  // Account gating: compute from the best-available user (profile > user)
+  // and ALWAYS allow admins through.
   // --------------------------------------------------------------------
-  const user2 = user || {};
-  const role   = (user2.role   ?? '').toLowerCase();
-  const status = (user2.status ?? '').toLowerCase();
+  const bestUser = profile || user || {};
+  const role   = (bestUser.role   ?? '').toLowerCase();
+  const status = (bestUser.status ?? '').toLowerCase();
 
   const isAdmin = role === 'admin';
   const isActive = status === 'active';
   const isApproved =
-    user2.approval_status === 'approved' ||
-    user2.is_approved === true ||
-    user2.approved === true;
+    bestUser.approval_status === 'approved' ||
+    bestUser.is_approved === true ||
+    bestUser.approved === true;
 
   // Show "pending approval" ONLY when NOT admin and also NOT active/approved
   if (!(isAdmin || isActive || isApproved)) {
