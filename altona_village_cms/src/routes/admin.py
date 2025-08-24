@@ -173,108 +173,106 @@ def get_all_residents():
     admin_check = admin_required()
     if admin_check:
         return admin_check
-    
+
     try:
-        # Get all users with either resident or owner records
-        users = User.query.filter(
-            (User.resident.has()) | (User.owner.has())
-        ).all()
-        
-        result = []
-        
+        users = User.query.filter((User.resident.has()) | (User.owner.has())).all()
+        out = []
+
         for user in users:
-            # Start with user data
-            user_data = {
-                'user_id': user.id,
-                'email': user.email,
-                'status': user.status,
-                'archived': user.archived if hasattr(user, 'archived') else False,
-                'created_at': user.created_at.isoformat() if user.created_at else None,
-                'is_resident': user.resident is not None,
-                'is_owner': user.owner is not None,
-            }
-            
-            # Add tenant_or_owner status
-            if user.resident and user.owner:
-                user_data['tenant_or_owner'] = 'owner-resident'
-            elif user.owner:
-                user_data['tenant_or_owner'] = 'owner'
-            elif user.resident:
-                user_data['tenant_or_owner'] = 'tenant'
-            else:
-                user_data['tenant_or_owner'] = ''
-            
-            # Add resident data if available
-            if user.resident:
-                resident = user.resident
-                user_data.update({
-                    'id': resident.id,
-                    'first_name': resident.first_name,
-                    'last_name': resident.last_name,
-                    'phone_number': resident.phone_number,
-                    'emergency_contact_name': resident.emergency_contact_name,
-                    'emergency_contact_number': resident.emergency_contact_number,
-                    'id_number': resident.id_number,
-                    'erf_number': resident.erf_number,
-                    'street_number': resident.street_number,
-                    'street_name': resident.street_name,
-                    'full_address': resident.full_address,
-                    'intercom_code': resident.intercom_code,
+            try:
+                row = {
+                    "user_id": user.id,
+                    "email": user.email,
+                    "status": user.status,
+                    "archived": bool(getattr(user, "archived", False)),
+                    "created_at": user.created_at.isoformat() if getattr(user, "created_at", None) else None,
+                    "is_resident": user.resident is not None,
+                    "is_owner": user.owner is not None,
+                }
+
+                # tenant_or_owner
+                if user.resident and user.owner:
+                    row["tenant_or_owner"] = "owner-resident"
+                elif user.owner:
+                    row["tenant_or_owner"] = "owner"
+                elif user.resident:
+                    row["tenant_or_owner"] = "tenant"
+                else:
+                    row["tenant_or_owner"] = ""
+
+                # resident details (if present)
+                if user.resident:
+                    r = user.resident
+                    row.update({
+                        "id": r.id,
+                        "first_name": r.first_name or "",
+                        "last_name": r.last_name or "",
+                        "phone_number": r.phone_number or "",
+                        "emergency_contact_name": r.emergency_contact_name or "",
+                        "emergency_contact_number": r.emergency_contact_number or "",
+                        "id_number": r.id_number or "",
+                        "erf_number": r.erf_number or "",
+                        "street_number": r.street_number or "",
+                        "street_name": r.street_name or "",
+                        "full_address": r.full_address or "",
+                        "intercom_code": r.intercom_code or "",
+                    })
+                # owner details (if resident missing but owner present)
+                elif user.owner:
+                    o = user.owner
+                    row.update({
+                        "id": o.id,
+                        "first_name": o.first_name or "",
+                        "last_name": o.last_name or "",
+                        "phone_number": o.phone_number or "",
+                        "emergency_contact_name": o.emergency_contact_name or "",
+                        "emergency_contact_number": o.emergency_contact_number or "",
+                        "id_number": o.id_number or "",
+                        "erf_number": o.erf_number or "",
+                        "street_number": o.street_number or "",
+                        "street_name": o.street_name or "",
+                        "full_address": o.full_address or "",
+                        "intercom_code": o.intercom_code or "",
+                    })
+
+                # vehicles (manual, JSON-safe)
+                vehicles = []
+                if user.resident:
+                    for v in Vehicle.query.filter_by(resident_id=user.resident.id).all():
+                        vehicles.append({
+                            "id": v.id,
+                            "registration_number": v.registration_number or "",
+                            "make": v.make or "",
+                            "model": v.model or "",
+                            "color": v.color or "",
+                            "status": v.status or "",
+                        })
+                if user.owner:
+                    for v in Vehicle.query.filter_by(owner_id=user.owner.id).all():
+                        vehicles.append({
+                            "id": v.id,
+                            "registration_number": v.registration_number or "",
+                            "make": v.make or "",
+                            "model": v.model or "",
+                            "color": v.color or "",
+                            "status": v.status or "",
+                        })
+
+                row["vehicles"] = vehicles
+                out.append(row)
+
+            except Exception as build_err:
+                # Don’t fail the whole list if one row is odd
+                out.append({
+                    "user_id": getattr(user, "id", None),
+                    "email": getattr(user, "email", None),
+                    "error": f"row_build_failed: {build_err}",
                 })
-            
-            # Add owner data if available (and no resident data)
-            elif user.owner:
-                owner = user.owner
-                user_data.update({
-                    'id': owner.id,
-                    'first_name': owner.first_name,
-                    'last_name': owner.last_name,
-                    'phone_number': owner.phone_number,
-                    'emergency_contact_name': owner.emergency_contact_name,
-                    'emergency_contact_number': owner.emergency_contact_number,
-                    'id_number': owner.id_number,
-                    'erf_number': owner.erf_number,
-                    'street_number': owner.street_number,
-                    'street_name': owner.street_name,
-                    'full_address': owner.full_address,
-                    'intercom_code': owner.intercom_code,
-                })
-            
-            # Add vehicle information for this user
-            vehicles = []
-            
-            # Get vehicles from resident data
-            if user.resident:
-                resident_vehicles = Vehicle.query.filter_by(resident_id=user.resident.id).all()
-                vehicles.extend([{
-                    'id': v.id,
-                    'registration_number': v.registration_number,
-                    'make': v.make,
-                    'model': v.model,
-                    'color': v.color,
-                    'status': v.status
-                } for v in resident_vehicles])
-            
-            # Get vehicles from owner data (for users who have owner records)
-            if user.owner:
-                owner_vehicles = Vehicle.query.filter_by(owner_id=user.owner.id).all()
-                vehicles.extend([{
-                    'id': v.id,
-                    'registration_number': v.registration_number,
-                    'make': v.make,
-                    'model': v.model,
-                    'color': v.color,
-                    'status': v.status
-                } for v in owner_vehicles])
-            
-            user_data['vehicles'] = vehicles
-            
-            result.append(user_data)
-        
-        return jsonify(result), 200
-        
+
+        return jsonify(out), 200
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/residents/<user_id>', methods=['PUT'])
 @jwt_required()
@@ -590,56 +588,82 @@ def get_all_properties():
     if admin_check:
         return admin_check
 
+    def iso(v):
+        return v.isoformat() if hasattr(v, "isoformat") else v
+
     try:
-        properties = Property.query.all()
+        props = Property.query.all()
         out = []
 
-        for p in properties:
-            pd = p.to_dict() if hasattr(p, "to_dict") else {}
+        for p in props:
+            try:
+                pd = {
+                    "id": p.id,
+                    "erf_number": p.erf_number or "",
+                    "address": getattr(p, "address", "") or "",
+                    "resident_id": getattr(p, "resident_id", None),
+                    "plot_registered_date": iso(getattr(p, "plot_registered_date", None)),
+                    "created_at": iso(getattr(p, "created_at", None)),
+                    "updated_at": iso(getattr(p, "updated_at", None)),
+                }
 
-            # normalize property date-ish fields
-            for k in ("plot_registered_date", "created_at", "updated_at"):
-                v = pd.get(k)
-                if hasattr(v, "isoformat"):
-                    pd[k] = v.isoformat()
+                # resident (minimal, JSON-safe)
+                if getattr(p, "resident", None):
+                    r = p.resident
+                    pd["resident"] = {
+                        "id": r.id,
+                        "first_name": r.first_name or "",
+                        "last_name": r.last_name or "",
+                        "phone_number": r.phone_number or "",
+                        "erf_number": r.erf_number or "",
+                        "full_address": r.full_address or "",
+                        "created_at": iso(getattr(r, "created_at", None)),
+                        "updated_at": iso(getattr(r, "updated_at", None)),
+                    }
 
-            # resident (guard None)
-            if getattr(p, "resident", None):
-                rd = p.resident.to_dict() if hasattr(p.resident, "to_dict") else {}
-                for k in ("created_at", "updated_at"):
-                    v = rd.get(k)
-                    if hasattr(v, "isoformat"):
-                        rd[k] = v.isoformat()
-                pd["resident"] = rd
+                # builder (guard None + dates)
+                if getattr(p, "builder", None):
+                    b = p.builder
+                    pd["builder"] = {
+                        "id": b.id,
+                        "company_name": b.company_name or "",
+                        "contact_person": b.contact_person or "",
+                        "contact_number": b.contact_number or "",
+                        "building_start_date": iso(getattr(b, "building_start_date", None)),
+                        "building_end_date": iso(getattr(b, "building_end_date", None)),
+                        "created_at": iso(getattr(b, "created_at", None)),
+                        "updated_at": iso(getattr(b, "updated_at", None)),
+                    }
 
-            # builder (guard None)
-            if getattr(p, "builder", None):
-                bd = p.builder.to_dict() if hasattr(p.builder, "to_dict") else {}
-                for k in ("building_start_date", "building_end_date", "created_at", "updated_at"):
-                    v = bd.get(k)
-                    if hasattr(v, "isoformat"):
-                        bd[k] = v.isoformat()
-                pd["builder"] = bd
+                # meters list (JSON-safe)
+                meters = []
+                if getattr(p, "meters", None):
+                    for m in p.meters:
+                        meters.append({
+                            "id": m.id,
+                            "meter_type": m.meter_type or "",
+                            "meter_number": m.meter_number or "",
+                            "installation_date": iso(getattr(m, "installation_date", None)),
+                            "created_at": iso(getattr(m, "created_at", None)),
+                            "updated_at": iso(getattr(m, "updated_at", None)),
+                        })
+                if meters:
+                    pd["meters"] = meters
 
-            # meters (guard None)
-            meters_list = []
-            if getattr(p, "meters", None):
-                for m in p.meters:
-                    md = m.to_dict() if hasattr(m, "to_dict") else {}
-                    for k in ("installation_date", "created_at", "updated_at"):
-                        v = md.get(k)
-                        if hasattr(v, "isoformat"):
-                            md[k] = v.isoformat()
-                    meters_list.append(md)
-            if meters_list:
-                pd["meters"] = meters_list
+                out.append(pd)
 
-            out.append(pd)
+            except Exception as build_err:
+                out.append({
+                    "id": getattr(p, "id", None),
+                    "erf_number": getattr(p, "erf_number", None),
+                    "error": f"row_build_failed: {build_err}",
+                })
 
         return jsonify(out), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 @admin_bp.route('/properties', methods=['POST'])
