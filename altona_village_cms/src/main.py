@@ -63,6 +63,9 @@ def create_app() -> Flask:
         app,
         resources={r"/api/*": {"origins": cors_origins}},
         supports_credentials=True,
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
+        expose_headers=["Content-Type", "Authorization"],
     )
     JWTManager(app)
     db.init_app(app)
