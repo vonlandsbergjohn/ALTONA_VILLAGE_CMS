@@ -4,7 +4,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy import case, desc
 
 from src.models.user import db, User  # your existing models/session
@@ -36,7 +36,7 @@ def serialize_change(c: UserChange):
         "change_timestamp": (c.change_timestamp.isoformat() if c.change_timestamp else None),
         "admin_reviewed": bool(c.admin_reviewed),
         # Keep keys front-end might expect; we don’t store these columns yet
-        "notes": None
+        "notes": None,
     }
 
 
@@ -67,50 +67,47 @@ def log_user_change(user_id, user_name, erf_number, change_type, field_name, old
 @admin_notifications.route("/admin/changes/stats", methods=["GET"])
 @admin_required
 def get_change_stats():
-    """Counts used by the dashboard."""
+    """Counts used by the dashboard (DB-agnostic date math)."""
     try:
-        # today
-        today_count = UserChange.query.filter(
-            db.func.date(UserChange.change_timestamp) == db.func.current_date()
-        ).count()
-
-        # last 7 days
-        week_count = UserChange.query.filter(
-            UserChange.change_timestamp >= db.func.datetime(db.func.current_timestamp(), "-7 days")
-        ).count()
+        now = datetime.utcnow()
+        start_today = datetime(now.year, now.month, now.day)   # midnight UTC
+        week_cutoff = now - timedelta(days=7)
 
         critical_fields = ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
 
-        critical_pending = UserChange.query.filter(
-            UserChange.field_name.in_(critical_fields),
-            UserChange.admin_reviewed.is_(False),
-        ).count()
+        # counts
+        today_count = db.session.query(db.func.count(UserChange.id))\
+            .filter(UserChange.change_timestamp >= start_today).scalar() or 0
 
-        non_critical_pending = UserChange.query.filter(
-            ~UserChange.field_name.in_(critical_fields),
-            UserChange.admin_reviewed.is_(False),
-        ).count()
+        week_count = db.session.query(db.func.count(UserChange.id))\
+            .filter(UserChange.change_timestamp >= week_cutoff).scalar() or 0
 
-        total_pending = UserChange.query.filter(
-            UserChange.admin_reviewed.is_(False)
-        ).count()
+        critical_pending = db.session.query(db.func.count(UserChange.id))\
+            .filter(UserChange.field_name.in_(critical_fields),
+                    UserChange.admin_reviewed.is_(False)).scalar() or 0
+
+        non_critical_pending = db.session.query(db.func.count(UserChange.id))\
+            .filter(~UserChange.field_name.in_(critical_fields),
+                    UserChange.admin_reviewed.is_(False)).scalar() or 0
+
+        total_pending = db.session.query(db.func.count(UserChange.id))\
+            .filter(UserChange.admin_reviewed.is_(False)).scalar() or 0
 
         # breakdowns
-        by_change_type = {
-            k: v for k, v in db.session.query(
-                UserChange.change_type, db.func.count(UserChange.id)
-            ).filter(
-                UserChange.admin_reviewed.is_(False)
-            ).group_by(UserChange.change_type).all()
-        }
+        by_change_type = dict(
+            db.session.query(UserChange.change_type, db.func.count(UserChange.id))
+              .filter(UserChange.admin_reviewed.is_(False))
+              .group_by(UserChange.change_type)
+              .all()
+        )
 
-        by_field_name = {
-            k: v for k, v in db.session.query(
-                UserChange.field_name, db.func.count(UserChange.id)
-            ).filter(
-                UserChange.admin_reviewed.is_(False)
-            ).group_by(UserChange.field_name).order_by(db.func.count(UserChange.id).desc()).all()
-        }
+        by_field_name = dict(
+            db.session.query(UserChange.field_name, db.func.count(UserChange.id))
+              .filter(UserChange.admin_reviewed.is_(False))
+              .group_by(UserChange.field_name)
+              .order_by(db.func.count(UserChange.id).desc())
+              .all()
+        )
 
         return jsonify({
             "success": True,
@@ -196,9 +193,9 @@ def get_pending_changes():
         priority = case(
             (
                 UserChange.field_name.in_(("cellphone_number", "vehicle_registration", "vehicle_registration_2")),
-                0
+                0,
             ),
-            else_=1
+            else_=1,
         )
 
         q = UserChange.query.filter(UserChange.admin_reviewed.is_(False))
