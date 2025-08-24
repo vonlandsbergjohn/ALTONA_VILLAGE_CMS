@@ -9,10 +9,11 @@
   <body>
     <div id="root"></div>
 
-    <!-- Global auth shims:
-         - Read token from storage (no async)
-         - Fix any bad 'Authorization: Bearer undefined'
-         - Attach Authorization to ALL backend API calls (fetch + axios/XHR) -->
+    <!-- Global shims:
+         - Rewrite any relative '/api/...' to the backend host
+         - Attach a real Authorization: Bearer <token> (and repair 'undefined')
+         - Capture and store token after /api/auth/login
+    -->
     <script>
       (function () {
         const API = 'https://altona-village-backend.onrender.com';
@@ -23,28 +24,33 @@
             const v = localStorage.getItem(k) || sessionStorage.getItem(k);
             if (typeof v === 'string' && v && v !== 'undefined') return v.replace(/^Bearer\s+/i, '');
           }
-          // cookies as a fallback
           const parts = document.cookie.split('; ').filter(Boolean);
           for (const p of parts) {
-            const i = p.indexOf('=');
-            const val = decodeURIComponent(p.slice(i + 1));
+            const i = p.indexOf('='), val = decodeURIComponent(p.slice(i + 1));
             if (val && val !== 'undefined') return val.replace(/^Bearer\s+/i, '');
           }
           return null;
         }
 
+        function toAPI(url) {
+          // rewrite '/api/...' to 'https://backend/api/...'
+          if (typeof url === 'string' && url.startsWith('/api/')) {
+            return API + url;
+          }
+          return url;
+        }
+
         // ---------- FETCH SHIM ----------
         const origFetch = window.fetch;
         window.fetch = function (input, init) {
-          const url = typeof input === 'string' ? input : (input && input.url) || '';
-          const needsAuth = url && (url.startsWith(API + '/api/') || url.startsWith('/api/'));
+          let url = typeof input === 'string' ? input : (input && input.url) || '';
+          const newUrl = toAPI(url);
+          const needsAuth = newUrl && newUrl.startsWith(API + '/api/');
 
+          init = init || {};
           if (needsAuth) {
-            init = init || {};
             const headers = new Headers(init.headers || {});
             let auth = headers.get('Authorization');
-
-            // if header missing, malformed, or contains 'undefined', fix it
             const token = getToken();
             if (!auth || /undefined/i.test(String(auth)) || !/^Bearer\s.+/.test(String(auth))) {
               if (token) headers.set('Authorization', 'Bearer ' + token);
@@ -52,46 +58,51 @@
             init.headers = headers;
           }
 
-          return origFetch(input, init);
+          const p = origFetch(newUrl, init);
+
+          // capture token after login
+          if ((url && url.includes('/api/auth/login')) || (newUrl && newUrl.includes('/api/auth/login'))) {
+            p.then(async (res) => {
+              try {
+                const data = await res.clone().json();
+                const tok = data.access_token || data.token || data.jwt || data.key;
+                if (tok) localStorage.setItem('access_token', tok);
+              } catch {}
+            }).catch(()=>{});
+          }
+
+          return p;
         };
 
         // ---------- XHR/AXIOS SHIM ----------
         const XHR = XMLHttpRequest.prototype;
-        const _open = XHR.open;
-        const _send = XHR.send;
-        const _setHeader = XHR.setRequestHeader;
+        const _open = XHR.open, _send = XHR.send, _set = XHR.setRequestHeader;
 
         XHR.open = function (method, url) {
-          this.__url = String(url || '');
+          this.__url = String(toAPI(url) || '');
           this.__hdrs = {};
-          return _open.apply(this, arguments);
+          return _open.call(this, method, this.__url);
         };
 
         XHR.setRequestHeader = function (name, value) {
           try {
             const lname = String(name).toLowerCase();
             this.__hdrs[lname] = value;
-            // If app tries to set 'Bearer undefined', replace it right here
-            if (lname === 'authorization') {
-              const token = getToken();
-              if (token) value = 'Bearer ' + token;
+            if (lname === 'authorization' && /undefined/i.test(String(value))) {
+              const t = getToken(); if (t) value = 'Bearer ' + t;
             }
           } catch {}
-          return _setHeader.call(this, name, value);
+          return _set.call(this, name, value);
         };
 
         XHR.send = function (body) {
           try {
-            const url = this.__url || '';
-            const needsAuth = url.startsWith(API + '/api/') || url.startsWith('/api/');
+            const needsAuth = this.__url && this.__url.startsWith(API + '/api/');
             const hasAuth = this.__hdrs && typeof this.__hdrs['authorization'] !== 'undefined';
-
             if (needsAuth) {
-              const token = getToken();
-              if (token) {
-                if (!hasAuth || /undefined/i.test(String(this.__hdrs['authorization']))) {
-                  _setHeader.call(this, 'Authorization', 'Bearer ' + token);
-                }
+              const t = getToken();
+              if (t && (!hasAuth || /undefined/i.test(String(this.__hdrs['authorization'])))) {
+                _set.call(this, 'Authorization', 'Bearer ' + t);
               }
             }
           } catch {}
@@ -100,7 +111,7 @@
       })();
     </script>
 
-    <!-- App bundle (keep after shims) -->
+    <!-- App bundle (keep after the shim) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
