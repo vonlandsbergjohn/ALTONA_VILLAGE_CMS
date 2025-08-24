@@ -6,7 +6,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.engine import Engine
 
-# We reuse the global db session from your User model module
 from src.models.user import db
 
 
@@ -22,8 +21,8 @@ class UserChange(db.Model):
     user_id = db.Column(db.String(64), nullable=False)
 
     # what changed
-    change_type = db.Column(db.String(50))          # e.g. "user_add", "update"
-    field_name  = db.Column(db.String(100))         # e.g. "vehicle_registration"
+    change_type = db.Column(db.String(50))
+    field_name  = db.Column(db.String(100))
     old_value   = db.Column(db.Text)
     new_value   = db.Column(db.Text)
 
@@ -33,14 +32,14 @@ class UserChange(db.Model):
     # review status
     admin_reviewed = db.Column(db.Boolean, default=False, nullable=False)
 
-    # NEW: which ERF the change relates to (nullable for legacy rows)
+    # NEW: related ERF (nullable for legacy rows)
     erf_number = db.Column(db.String(64), nullable=True)
 
 
-def _add_column_if_missing(engine: Engine, table: str, column: str, ddl_sqlite: str, ddl_pg: str) -> None:
-    """Add a column if it's missing (SQLite / Postgres compatible)."""
+def _add_column_if_missing(engine: Engine, table: str, column: str,
+                           ddl_sqlite: str, ddl_pg: str) -> None:
     insp = db.inspect(engine)
-    existing_cols = {col["name"] for col in insp.get_columns(table)}
+    existing_cols = {c["name"] for c in insp.get_columns(table)}
     if column in existing_cols:
         return
 
@@ -61,26 +60,20 @@ def ensure_user_changes_table() -> None:
         tables = set(insp.get_table_names())
 
         if "user_changes" not in tables:
-            # First-time create
             UserChange.__table__.create(bind=engine)
             current_app.logger.info("Created table user_changes")
 
-        # Ensure the new erf_number column exists (safe if already present)
         _add_column_if_missing(
             engine,
             "user_changes",
             "erf_number",
-            # SQLite
             "ALTER TABLE user_changes ADD COLUMN erf_number TEXT",
-            # Postgres (Render) and others
-            "ALTER TABLE user_changes ADD COLUMN IF NOT EXISTS erf_number VARCHAR(64)"
+            "ALTER TABLE user_changes ADD COLUMN IF NOT EXISTS erf_number VARCHAR(64)",
         )
 
         current_app.logger.info("user_changes table OK (schema up-to-date)")
     except SQLAlchemyError as e:
-        # Don’t crash the app—just log so we can see it in Render logs / console
         try:
             current_app.logger.exception("Failed to ensure user_changes table: %s", e)
         except Exception:
-            # current_app may be unavailable in some early init cases
             print(f"[ensure_user_changes_table] failed: {e}")
