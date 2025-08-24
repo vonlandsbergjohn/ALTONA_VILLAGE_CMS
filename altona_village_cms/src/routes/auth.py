@@ -1,6 +1,7 @@
 # altona_village_cms/src/routes/auth.py
 from datetime import timedelta
 from flask import Blueprint, request, jsonify
+from flask_cors import cross_origin
 from flask_jwt_extended import (
     create_access_token,
     jwt_required,
@@ -173,8 +174,11 @@ def register():
         return jsonify({"error": str(e)}), 500
 
 
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route("/login", methods=["POST", "OPTIONS"])
+@cross_origin(supports_credentials=True)
 def login():
+    if request.method == "OPTIONS":
+        return ("", 204)
     """
     Admin can ALWAYS log in, even if status isn't 'active' (we auto-activate them).
     All other roles must be 'active'.
