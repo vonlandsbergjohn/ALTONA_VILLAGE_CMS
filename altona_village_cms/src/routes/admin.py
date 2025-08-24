@@ -780,7 +780,7 @@ def get_all_complaints():
                     "updated_at": iso(getattr(c, "updated_at", None)),
                 }
 
-                # resident (flattened & guarded)
+                # resident (flattened, JSON-safe)
                 if getattr(c, "resident", None):
                     r = c.resident
                     item["resident"] = {
@@ -792,7 +792,7 @@ def get_all_complaints():
                         "full_address": r.full_address or "",
                     }
 
-                # updates (flattened & guarded)
+                # updates (flattened, JSON-safe)
                 updates = []
                 if getattr(c, "updates", None):
                     for u in c.updates:
@@ -808,7 +808,6 @@ def get_all_complaints():
                 out.append(item)
 
             except Exception as row_err:
-                # keep going even if one row is odd
                 out.append({
                     "id": getattr(c, "id", None),
                     "error": f"row_build_failed: {row_err}",
@@ -818,6 +817,7 @@ def get_all_complaints():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 
 @admin_bp.route('/complaints/<complaint_id>/update', methods=['POST'])
