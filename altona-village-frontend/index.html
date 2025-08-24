@@ -9,124 +9,90 @@
   <body>
     <div id="root"></div>
 
-    <!-- Global shim: attach Authorization to ALL backend API calls (fetch + XHR) and
-         store the token after /api/auth/login -->
+    <!-- Global auth shims:
+         - Read token from storage (no async)
+         - Fix any bad 'Authorization: Bearer undefined'
+         - Attach Authorization to ALL backend API calls (fetch + axios/XHR) -->
     <script>
       (function () {
         const API = 'https://altona-village-backend.onrender.com';
-        const origFetch = window.fetch;
 
-        function looksJWT(v) {
-          return typeof v === 'string' && v.split('.').length === 3;
-        }
-        function pickTokenFromObj(obj) {
-          if (!obj || typeof obj !== 'object') return null;
-          const direct = obj.token || obj.access_token || obj.jwt || obj.key || obj.authToken || null;
-          if (typeof direct === 'string') return direct;
-          if (obj.user && typeof obj.user === 'object') {
-            const u = obj.user;
-            const nested = u.token || u.access_token || u.jwt || u.key || u.authToken || null;
-            if (typeof nested === 'string') return nested;
-          }
-          return null;
-        }
-        function storeToken(token) {
-          if (!token) return;
-          try { localStorage.setItem('access_token', String(token)); } catch {}
-        }
-        function findToken() {
-          // direct keys
-          for (const k of ['access_token','token','jwt','key','authToken']) {
+        function getToken() {
+          const keys = ['access_token','token','jwt','key','authToken'];
+          for (const k of keys) {
             const v = localStorage.getItem(k) || sessionStorage.getItem(k);
-            if (v && (looksJWT(v) || v.startsWith('ey'))) return v.replace(/^Bearer\s+/i, '');
+            if (typeof v === 'string' && v && v !== 'undefined') return v.replace(/^Bearer\s+/i, '');
           }
-          // scan JSON blobs
-          for (const storage of [localStorage, sessionStorage]) {
-            for (let i = 0; i < storage.length; i++) {
-              const k = storage.key(i);
-              try {
-                const raw = storage.getItem(k);
-                if (!raw) continue;
-                if (looksJWT(raw)) return raw;
-                const obj = JSON.parse(raw);
-                const fromObj = pickTokenFromObj(obj);
-                if (fromObj) return String(fromObj).replace(/^Bearer\s+/i, '');
-              } catch {}
-            }
-          }
-          // cookies
+          // cookies as a fallback
           const parts = document.cookie.split('; ').filter(Boolean);
           for (const p of parts) {
             const i = p.indexOf('=');
             const val = decodeURIComponent(p.slice(i + 1));
-            if (looksJWT(val)) return val;
-            try {
-              const obj = JSON.parse(val);
-              const fromObj = pickTokenFromObj(obj);
-              if (fromObj) return String(fromObj).replace(/^Bearer\s+/i, '');
-            } catch {}
+            if (val && val !== 'undefined') return val.replace(/^Bearer\s+/i, '');
           }
           return null;
         }
 
-        // ---- Fetch shim ----
+        // ---------- FETCH SHIM ----------
+        const origFetch = window.fetch;
         window.fetch = function (input, init) {
           const url = typeof input === 'string' ? input : (input && input.url) || '';
-          try {
-            if (url && (url.startsWith(API + '/api/'))) {
-              init = init || {};
-              const headers = new Headers(init.headers || {});
-              if (!headers.has('Authorization')) {
-                const token = findToken();
-                if (token) {
-                  headers.set('Authorization', 'Bearer ' + token);
-                  init.headers = headers;
-                }
-              }
+          const needsAuth = url && (url.startsWith(API + '/api/') || url.startsWith('/api/'));
+
+          if (needsAuth) {
+            init = init || {};
+            const headers = new Headers(init.headers || {});
+            let auth = headers.get('Authorization');
+
+            // if header missing, malformed, or contains 'undefined', fix it
+            const token = getToken();
+            if (!auth || /undefined/i.test(String(auth)) || !/^Bearer\s.+/.test(String(auth))) {
+              if (token) headers.set('Authorization', 'Bearer ' + token);
             }
-          } catch {}
-          const p = origFetch(input, init);
-          try {
-            if (url && url.startsWith(API + '/api/auth/login')) {
-              p.then(async (res) => {
-                try {
-                  const data = await res.clone().json();
-                  const tok = data.token || data.access_token || data.jwt || data.key;
-                  if (tok) storeToken(tok);
-                } catch {}
-              }).catch(() => {});
-            }
-          } catch {}
-          return p;
+            init.headers = headers;
+          }
+
+          return origFetch(input, init);
         };
 
-        // ---- XHR (axios) shim ----
+        // ---------- XHR/AXIOS SHIM ----------
         const XHR = XMLHttpRequest.prototype;
         const _open = XHR.open;
         const _send = XHR.send;
         const _setHeader = XHR.setRequestHeader;
 
         XHR.open = function (method, url) {
-          this.__url = url;
+          this.__url = String(url || '');
           this.__hdrs = {};
           return _open.apply(this, arguments);
         };
+
         XHR.setRequestHeader = function (name, value) {
           try {
-            this.__hdrs = this.__hdrs || {};
-            this.__hdrs[name.toLowerCase()] = value;
+            const lname = String(name).toLowerCase();
+            this.__hdrs[lname] = value;
+            // If app tries to set 'Bearer undefined', replace it right here
+            if (lname === 'authorization') {
+              const token = getToken();
+              if (token) value = 'Bearer ' + token;
+            }
           } catch {}
           return _setHeader.call(this, name, value);
         };
+
         XHR.send = function (body) {
           try {
-            const url = String(this.__url || '');
-            const isBackend = url.startsWith(API + '/api/');
-            // some code might still call '/api/...'; optional: treat that as backend too
-            const isRelApi = url.startsWith('/api/');
-            if ((isBackend || isRelApi) && !(this.__hdrs && this.__hdrs['authorization'])) {
-              const token = findToken();
-              if (token) _setHeader.call(this, 'Authorization', 'Bearer ' + token);
+            const url = this.__url || '';
+            const needsAuth = url.startsWith(API + '/api/') || url.startsWith('/api/');
+            const hasAuth = this.__hdrs && typeof this.__hdrs['authorization'] !== 'undefined';
+
+            if (needsAuth) {
+              const token = getToken();
+              if (token) {
+                if (!hasAuth || /undefined/i.test(String(this.__hdrs['authorization']))) {
+                  _setHeader.call(this, 'Authorization', 'Bearer ' + token);
+                }
+              }
             }
           } catch {}
           return _send.apply(this, arguments);
@@ -134,7 +100,7 @@
       })();
     </script>
 
-    <!-- App bundle (keep after the shim) -->
+    <!-- App bundle (keep after shims) -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
