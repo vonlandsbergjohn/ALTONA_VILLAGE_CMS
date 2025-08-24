@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import text
 from src.models.user import User, Resident, Owner, Property, Vehicle, Builder, Meter, Complaint, ComplaintUpdate, ErfAddressMapping, db
+from src.models.user_change import UserChange
 from src.utils.email_service import send_approval_email, send_rejection_email
 from datetime import datetime
 import io
@@ -989,170 +990,150 @@ def export_gate_register():
 @admin_bp.route('/gate-register/changes', methods=['GET'])
 @jwt_required()
 def get_gate_register_changes():
-    """Get gate register data with change tracking for notification system"""
+    """
+    Get gate register data with change tracking for notification system,
+    using SQLAlchemy (Postgres) instead of direct sqlite file access.
+    """
     admin_check = admin_required()
     if admin_check:
         return admin_check
-    
+
     try:
-        # Get all users with changes from the user_changes table
-        import sqlite3
-        db_path = os.path.join(os.path.dirname(__file__), '..', 'database', 'app.db')
-        
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            
-            # Get users who have unreviewed changes
-            cursor.execute("""
-                SELECT DISTINCT user_id, field_name, new_value, old_value, change_timestamp
-                FROM user_changes 
-                WHERE admin_reviewed = 0
-                ORDER BY change_timestamp DESC
-            """)
-            
-            user_changes = cursor.fetchall()
-        
-        if not user_changes:
+        # 1) Pull all unreviewed changes
+        changes = (
+            UserChange.query
+            .filter_by(admin_reviewed=False)
+            .order_by(UserChange.change_timestamp.desc())
+            .all()
+        )
+
+        if not changes:
             return jsonify({
                 'success': True,
                 'data': [],
                 'count': 0,
                 'message': 'No pending changes found'
             }), 200
-        
-        # Group changes by user_id and classify them
+
+        # 2) Group changes by user_id and classify critical
+        critical_fields = {'cellphone_number', 'vehicle_registration', 'vehicle_registration_2'}
         changes_by_user = {}
-        critical_fields = ['cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
-        
-        for change in user_changes:
-            user_id, field_name, new_value, old_value, timestamp = change
-            if user_id not in changes_by_user:
-                changes_by_user[user_id] = {}
-            
-            is_critical = field_name in critical_fields
-            changes_by_user[user_id][field_name] = {
-                'new_value': new_value,
-                'old_value': old_value,
-                'timestamp': timestamp,
+
+        for ch in changes:
+            u = changes_by_user.setdefault(ch.user_id, {})
+            u[ch.field_name] = {
+                'new_value': ch.new_value,
+                'old_value': ch.old_value,
+                'timestamp': ch.change_timestamp.isoformat() if ch.change_timestamp else None,
                 'changed': True,
-                'is_critical': is_critical
+                'is_critical': ch.field_name in critical_fields
             }
-        
-        # Get gate register data for users with changes
+
+        # 3) Build gate-register style rows for only those users
         result = []
-        user_ids = list(changes_by_user.keys())
-        
-        # Convert string UUIDs to proper format for querying
-        for user_uuid in user_ids:
-            user = User.query.filter_by(id=user_uuid).first()
+
+        for user_id, user_change_info in changes_by_user.items():
+            user = User.query.get(user_id)
             if not user or user.role == 'admin':
                 continue
-                
-            resident_data = None
-            owner_data = None
-            status = 'Unknown'
-            
-            # Determine user status and get appropriate data
-            if user.resident and user.owner:
+
+            # decide status + primary record
+            resident_data = user.resident if user.resident else None
+            owner_data = user.owner if user.owner else None
+
+            if resident_data and owner_data:
                 status = 'Owner-Resident'
-                resident_data = user.resident
-                owner_data = user.owner
-            elif user.resident:
+            elif resident_data:
                 status = 'Resident'
-                resident_data = user.resident
-            elif user.owner:
-                status = 'Owner'
-                owner_data = user.owner
-            else:
-                continue
-            
-            # Use the primary data source (resident takes priority)
-            primary_data = resident_data if resident_data else owner_data
-            if not primary_data:
-                continue
-            
-            # Get vehicles
-            vehicle_registrations = []
-            if resident_data:
-                vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
-                vehicle_registrations = [v.registration_number for v in vehicles]
             elif owner_data:
-                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
-                vehicle_registrations = [v.registration_number for v in vehicles]
-            
-            # Get changes for this user
-            user_change_info = changes_by_user.get(user_uuid, {})
-            
-            # Check if phone number was changed
+                status = 'Owner'
+            else:
+                # no usable profile, skip
+                continue
+
+            primary = resident_data or owner_data
+            if not primary:
+                continue
+
+            # Vehicles tied to the correct entity
+            vehicle_regs = []
+            if resident_data:
+                regs = Vehicle.query.filter_by(resident_id=resident_data.id).all()
+                vehicle_regs = [v.registration_number for v in regs]
+            elif owner_data:
+                regs = Vehicle.query.filter_by(owner_id=owner_data.id).all()
+                vehicle_regs = [v.registration_number for v in regs]
+
+            # Change flags/values
             phone_changed = 'cellphone_number' in user_change_info
-            current_phone = user_change_info.get('cellphone_number', {}).get('new_value', primary_data.phone_number or '')
-            
-            # Check if any vehicle registrations were changed
-            vehicle_changes = [change for field, change in user_change_info.items() if 'vehicle_registration' in field]
-            
-            if vehicle_registrations:
-                # Create entry for each vehicle
-                for i, vehicle_reg in enumerate(vehicle_registrations):
-                    # Check if this specific vehicle was changed
-                    vehicle_changed = any(change['new_value'] == vehicle_reg for change in vehicle_changes)
-                    
+            current_phone = user_change_info.get('cellphone_number', {}).get('new_value', primary.phone_number or '')
+
+            vehicle_changes = [c for field, c in user_change_info.items() if 'vehicle_registration' in field]
+
+            # 4) Emit rows (one per vehicle; at least one row even if no vehicles)
+            if vehicle_regs:
+                for i, reg in enumerate(vehicle_regs):
+                    vehicle_changed = any(c['new_value'] == reg for c in vehicle_changes)
                     entry = {
                         'user_id': user.id,
                         'resident_status': status,
-                        'first_name': primary_data.first_name or '',
-                        'last_name': primary_data.last_name or '',
-                        'surname': primary_data.last_name or '',
-                        'street_number': primary_data.street_number or '',
-                        'street_name': primary_data.street_name or '',
-                        'full_address': primary_data.full_address or '',
-                        'erf_number': primary_data.erf_number or '',
-                        'intercom_code': primary_data.intercom_code or '',
+                        'first_name': primary.first_name or '',
+                        'last_name': primary.last_name or '',
+                        'surname': primary.last_name or '',
+                        'street_number': primary.street_number or '',
+                        'street_name': primary.street_name or '',
+                        'full_address': primary.full_address or '',
+                        'erf_number': primary.erf_number or '',
+                        'intercom_code': primary.intercom_code or '',
                         'phone_number': current_phone,
-                        'vehicle_registration': vehicle_reg,
+                        'vehicle_registration': reg,
                         'email': user.email,
-                        'sort_key': (primary_data.street_name or '').upper(),
-                        # Change tracking flags
-                        'phone_changed': phone_changed and i == 0,  # Only show phone change on first vehicle entry
+                        'sort_key': (primary.street_name or '').upper(),
+                        # change tracking flags
+                        'phone_changed': phone_changed and i == 0,   # show once
                         'vehicle_changed': vehicle_changed,
-                        'changes_info': user_change_info if i == 0 else {}  # Only include change info on first entry
+                        'changes_info': user_change_info if i == 0 else {}
                     }
                     result.append(entry)
             else:
-                # No vehicles - still include the resident/owner
+                # no vehicles — still include one row
                 entry = {
                     'user_id': user.id,
                     'resident_status': status,
-                    'first_name': primary_data.first_name or '',
-                    'last_name': primary_data.last_name or '',
-                    'surname': primary_data.last_name or '',
-                    'street_number': primary_data.street_number or '',
-                    'street_name': primary_data.street_name or '',
-                    'full_address': primary_data.full_address or '',
-                    'erf_number': primary_data.erf_number or '',
-                    'intercom_code': primary_data.intercom_code or '',
+                    'first_name': primary.first_name or '',
+                    'last_name': primary.last_name or '',
+                    'surname': primary.last_name or '',
+                    'street_number': primary.street_number or '',
+                    'street_name': primary.street_name or '',
+                    'full_address': primary.full_address or '',
+                    'erf_number': primary.erf_number or '',
+                    'intercom_code': primary.intercom_code or '',
                     'phone_number': current_phone,
                     'vehicle_registration': '',
                     'email': user.email,
-                    'sort_key': (primary_data.street_name or '').upper(),
-                    # Change tracking flags
+                    'sort_key': (primary.street_name or '').upper(),
                     'phone_changed': phone_changed,
                     'vehicle_changed': False,
                     'changes_info': user_change_info
                 }
                 result.append(entry)
-        
-        # Sort by street name alphabetically
+
+        # 5) Sort by street name to match export behaviour
         result.sort(key=lambda x: x['sort_key'])
-        
+
+        # total raw changes count (sum of fields per user)
+        total_changes = sum(len(v) for v in changes_by_user.values())
+
         return jsonify({
             'success': True,
             'data': result,
             'count': len(result),
-            'total_changes': len(user_changes)
+            'total_changes': total_changes
         }), 200
-        
+
     except Exception as e:
         return jsonify({'error': f'Failed to get gate register changes: {str(e)}'}), 500
+
 
 @admin_bp.route('/gate-register/export-changes', methods=['GET'])
 @jwt_required()

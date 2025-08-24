@@ -1,629 +1,253 @@
-# Admin Notifications Route - Track Critical User Updates
-# For managing changes to cellphone numbers and vehicle registrations
+# src/routes/admin_notifications.py
+# Admin Notifications Route - Track Critical User Updates (SQLAlchemy version)
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
-from datetime import datetime, timedelta
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
-import sqlite3
-import os
+from datetime import datetime
+from sqlalchemy import case, desc
+
+from src.models.user import db, User  # your existing models/session
+from src.models.user_change import UserChange  # the new model/table
 
 admin_notifications = Blueprint('admin_notifications', __name__)
 
-# Database path
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'database', 'app.db')
-
+# ---------------------------- helpers ---------------------------------
 def admin_required(f):
     @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # First check if JWT is valid
-        try:
-            from flask_jwt_extended import verify_jwt_in_request
-            verify_jwt_in_request()
-        except:
-            return jsonify({'error': 'Authentication required'}), 401
-            
-        # Get user info from JWT
-        user_id = get_jwt_identity()
-        if not user_id:
-            return jsonify({'error': 'Invalid token'}), 401
-            
-        # Check if user is admin
-        from src.models.user import User
-        user = User.query.get(user_id)
-        if not user or user.role != 'admin':
-            return jsonify({'error': 'Admin access required'}), 403
-            
+    @jwt_required()
+    def decorated(*args, **kwargs):
+        uid = get_jwt_identity()
+        u = User.query.get(uid)
+        if not u or u.role != "admin":
+            return jsonify({"error": "Admin access required"}), 403
         return f(*args, **kwargs)
-    return decorated_function
+    return decorated
 
-def init_change_tracking_table():
-    """Initialize the change tracking table if it doesn't exist"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_changes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            user_name TEXT,
-            erf_number TEXT,
-            change_type TEXT NOT NULL,
-            field_name TEXT NOT NULL,
-            old_value TEXT,
-            new_value TEXT,
-            change_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            admin_reviewed BOOLEAN DEFAULT FALSE,
-            admin_reviewer TEXT,
-            review_timestamp DATETIME,
-            exported_to_external BOOLEAN DEFAULT FALSE,
-            export_timestamp DATETIME,
-            notes TEXT,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        )
-    ''')
-    
-    # Create index for faster queries
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_user_changes_timestamp 
-        ON user_changes (change_timestamp DESC)
-    ''')
-    
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_user_changes_reviewed 
-        ON user_changes (admin_reviewed, change_timestamp DESC)
-    ''')
-    
-    conn.commit()
-    conn.close()
 
+def serialize_change(c: UserChange):
+    return {
+        "id": c.id,
+        "user_id": c.user_id,
+        "change_type": c.change_type,
+        "field_name": c.field_name,
+        "old_value": c.old_value,
+        "new_value": c.new_value,
+        "change_timestamp": (c.change_timestamp.isoformat() if c.change_timestamp else None),
+        "admin_reviewed": bool(c.admin_reviewed),
+        # Keep keys front-end might expect; we don’t store these columns yet
+        "notes": None
+    }
+
+
+# Keep the signature used by admin.py, but store via SQLAlchemy
 def log_user_change(user_id, user_name, erf_number, change_type, field_name, old_value, new_value):
-    """Log a user change to the tracking table"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        INSERT INTO user_changes 
-        (user_id, user_name, erf_number, change_type, field_name, old_value, new_value)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (user_id, user_name, erf_number, change_type, field_name, old_value, new_value))
-    
-    conn.commit()
-    
-    # Cleanup old processed records to prevent database bloat
-    # Keep only last 1000 processed records and all unprocessed records
-    cursor.execute('''
-        DELETE FROM user_changes 
-        WHERE admin_reviewed = TRUE 
-        AND id NOT IN (
-            SELECT id FROM user_changes 
-            WHERE admin_reviewed = TRUE 
-            ORDER BY change_timestamp DESC 
-            LIMIT 1000
+    try:
+        change = UserChange(
+            user_id=str(user_id),
+            field_name=str(field_name),
+            old_value=str(old_value) if old_value is not None else None,
+            new_value=str(new_value) if new_value is not None else None,
+            change_type=str(change_type or "update"),
+            change_timestamp=datetime.utcnow(),
+            admin_reviewed=False,
         )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
-def cleanup_old_changes():
-    """Cleanup old processed changes to prevent database bloat"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Delete processed records older than 6 months, keeping only 1000 most recent
-        cursor.execute('''
-            DELETE FROM user_changes 
-            WHERE admin_reviewed = TRUE 
-            AND change_timestamp < datetime('now', '-6 months')
-            AND id NOT IN (
-                SELECT id FROM user_changes 
-                WHERE admin_reviewed = TRUE 
-                ORDER BY change_timestamp DESC 
-                LIMIT 1000
-            )
-        ''')
-        
-        deleted_count = cursor.rowcount
-        conn.commit()
-        conn.close()
-        
-        return deleted_count
-        
+        db.session.add(change)
+        db.session.commit()
+        return True
     except Exception as e:
-        print(f"Error during cleanup: {e}")
-        return 0
+        db.session.rollback()
+        # Don’t crash the caller; just report failure
+        print(f"[log_user_change] failed: {e}")
+        return False
 
-@admin_notifications.route('/admin/changes/pending', methods=['GET'])
-@admin_required
-def get_pending_changes():
-    """Get all unreviewed changes, prioritizing critical fields with pagination support"""
-    try:
-        # Get pagination parameters from query string
-        from flask import request
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))  # Default 50 per page
-        offset = (page - 1) * per_page
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Critical fields that need immediate attention
-        critical_fields = ['cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
-        
-        # Get total count first
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_changes WHERE admin_reviewed = FALSE
-        ''')
-        total_count = cursor.fetchone()[0]
-        
-        # Get paginated results
-        cursor.execute('''
-            SELECT 
-                id, user_id, user_name, erf_number, change_type, field_name, 
-                old_value, new_value, change_timestamp, notes,
-                CASE 
-                    WHEN field_name IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2') 
-                    THEN 'critical' 
-                    ELSE 'normal' 
-                END as priority
-            FROM user_changes 
-            WHERE admin_reviewed = FALSE 
-            ORDER BY 
-                CASE 
-                    WHEN field_name IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2') 
-                    THEN 0 
-                    ELSE 1 
-                END,
-                change_timestamp DESC
-            LIMIT ? OFFSET ?
-        ''', (per_page, offset))
-        
-        changes = []
-        for row in cursor.fetchall():
-            changes.append({
-                'id': row[0],
-                'user_id': row[1],
-                'user_name': row[2],
-                'erf_number': row[3],
-                'change_type': row[4],
-                'field_name': row[5],
-                'old_value': row[6],
-                'new_value': row[7],
-                'change_timestamp': row[8],
-                'notes': row[9],
-                'priority': row[10]
-            })
-        
-        # Get critical count
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_changes 
-            WHERE admin_reviewed = FALSE 
-            AND field_name IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')
-        ''')
-        critical_count = cursor.fetchone()[0]
-        
-        conn.close()
-        
-        # Calculate pagination info
-        total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
-        has_next = page < total_pages
-        has_prev = page > 1
-        
-        return jsonify({
-            'success': True,
-            'changes': changes,
-            'pagination': {
-                'page': page,
-                'per_page': per_page,
-                'total_count': total_count,
-                'total_pages': total_pages,
-                'has_next': has_next,
-                'has_prev': has_prev
-            },
-            'total_pending': total_count,
-            'critical_pending': critical_count,
-            'showing_count': len(changes)
-        })
-        
-    except Exception as e:
-                return jsonify({'error': f'Failed to mark changes as reviewed: {str(e)}'}), 500
 
-@admin_notifications.route('/admin/changes/cleanup', methods=['POST'])
-@admin_required
-def cleanup_processed_changes():
-    """Cleanup old processed changes to free up database space"""
-    try:
-        deleted_count = cleanup_old_changes()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Cleanup completed. Deleted {deleted_count} old processed records.',
-            'deleted_count': deleted_count
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to cleanup changes: {str(e)}'}), 500
+# ----------------------------- routes ---------------------------------
 
-@admin_notifications.route('/admin/changes/critical', methods=['GET'])
-@admin_required
-def get_critical_changes():
-    """Get only critical changes (cellphone and vehicle registration)"""
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT 
-                id, user_id, user_name, erf_number, change_type, field_name, 
-                old_value, new_value, change_timestamp, admin_reviewed, notes
-            FROM user_changes 
-            WHERE field_name IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')
-            AND admin_reviewed = FALSE
-            ORDER BY change_timestamp DESC
-        ''')
-        
-        changes = []
-        for row in cursor.fetchall():
-            changes.append({
-                'id': row[0],
-                'user_id': row[1],
-                'user_name': row[2],
-                'erf_number': row[3],
-                'change_type': row[4],
-                'field_name': row[5],
-                'old_value': row[6],
-                'new_value': row[7],
-                'change_timestamp': row[8],
-                'admin_reviewed': row[9],
-                'notes': row[10]
-            })
-        
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'critical_changes': changes,
-            'count': len(changes)
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to fetch critical changes: {str(e)}'}), 500
-
-@admin_notifications.route('/admin/changes/non-critical', methods=['GET'])
-@admin_required
-def get_non_critical_changes():
-    """Get non-critical changes (all fields except cellphone and vehicle registration)"""
-    try:
-        page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 50, type=int)  # Default 50 per page
-        show_reviewed = request.args.get('show_reviewed', 'false').lower() == 'true'
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Build query conditions
-        conditions = ["field_name NOT IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')"]
-        if not show_reviewed:
-            conditions.append("admin_reviewed = FALSE")
-        
-        where_clause = " AND ".join(conditions)
-        
-        # Get total count
-        cursor.execute(f'''
-            SELECT COUNT(*) FROM user_changes 
-            WHERE {where_clause}
-        ''')
-        total_count = cursor.fetchone()[0]
-        
-        # Get paginated results
-        offset = (page - 1) * per_page
-        cursor.execute(f'''
-            SELECT 
-                id, user_id, user_name, erf_number, change_type, field_name, 
-                old_value, new_value, change_timestamp, admin_reviewed, notes
-            FROM user_changes 
-            WHERE {where_clause}
-            ORDER BY change_timestamp DESC
-            LIMIT ? OFFSET ?
-        ''', (per_page, offset))
-        
-        changes = []
-        for row in cursor.fetchall():
-            changes.append({
-                'id': row[0],
-                'user_id': row[1],
-                'user_name': row[2],
-                'erf_number': row[3],
-                'change_type': row[4],
-                'field_name': row[5],
-                'old_value': row[6],
-                'new_value': row[7],
-                'change_timestamp': row[8],
-                'admin_reviewed': row[9],
-                'notes': row[10]
-            })
-        
-        conn.close()
-        
-        # Calculate pagination info
-        total_pages = (total_count + per_page - 1) // per_page
-        has_next = page < total_pages
-        has_prev = page > 1
-        
-        return jsonify({
-            'success': True,
-            'non_critical_changes': changes,
-            'pagination': {
-                'page': page,
-                'per_page': per_page,
-                'total_count': total_count,
-                'total_pages': total_pages,
-                'has_next': has_next,
-                'has_prev': has_prev
-            },
-            'count': len(changes),
-            'total_pending': total_count
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to fetch non-critical changes: {str(e)}'}), 500
-
-@admin_notifications.route('/admin/changes/review', methods=['POST'])
-@admin_required
-def review_changes():
-    """Mark changes as reviewed by admin"""
-    try:
-        data = request.json
-        change_ids = data.get('change_ids', [])
-        notes = data.get('notes', '')
-        
-        if not change_ids:
-            return jsonify({'error': 'No change IDs provided'}), 400
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Mark changes as reviewed
-        placeholders = ','.join(['?' for _ in change_ids])
-        # Get admin username from JWT
-        user_id = get_jwt_identity()
-        from src.models.user import User
-        admin_user = User.query.get(user_id)
-        admin_username = admin_user.email if admin_user else 'Unknown Admin'
-        
-        cursor.execute(f'''
-            UPDATE user_changes 
-            SET admin_reviewed = TRUE, 
-                admin_reviewer = ?, 
-                review_timestamp = CURRENT_TIMESTAMP,
-                notes = COALESCE(notes || ' | ' || ?, ?)
-            WHERE id IN ({placeholders})
-        ''', [admin_username] + [notes, notes] + change_ids)
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Reviewed {len(change_ids)} changes',
-            'reviewed_by': admin_username
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to review changes: {str(e)}'}), 500
-
-@admin_notifications.route('/admin/changes/export-critical', methods=['GET'])
-@admin_required
-def export_critical_data():
-    """Export critical data for external systems (Accentronix & Camera System)"""
-    try:
-        export_type = request.args.get('type', 'all')  # 'accentronix', 'camera', or 'all'
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Get users with recent critical changes
-        if export_type == 'accentronix':
-            # Export cellphone data for Accentronix gate system
-            cursor.execute('''
-                SELECT DISTINCT u.id, u.full_name, u.erf_number, u.cellphone_number,
-                       MAX(uc.change_timestamp) as last_change
-                FROM users u
-                LEFT JOIN user_changes uc ON u.id = uc.user_id 
-                WHERE u.cellphone_number IS NOT NULL 
-                AND u.cellphone_number != ''
-                AND (uc.field_name = 'cellphone_number' OR uc.field_name IS NULL)
-                GROUP BY u.id, u.full_name, u.erf_number, u.cellphone_number
-                ORDER BY last_change DESC, u.erf_number
-            ''')
-            
-            export_data = []
-            for row in cursor.fetchall():
-                export_data.append({
-                    'erf_number': row[2],
-                    'resident_name': row[1],
-                    'cellphone_number': row[3],
-                    'intercom_code': f"ERF{row[2][:4]}",  # Generate intercom code
-                    'last_updated': row[4] or 'Initial data'
-                })
-                
-            return jsonify({
-                'success': True,
-                'export_type': 'accentronix_gate_system',
-                'data': export_data,
-                'count': len(export_data),
-                'instructions': 'Import this data into your Accentronix gate system for intercom codes'
-            })
-            
-        elif export_type == 'camera':
-            # Export vehicle registration data for camera system
-            cursor.execute('''
-                SELECT DISTINCT u.id, u.full_name, u.erf_number, 
-                       u.vehicle_registration, u.vehicle_registration_2,
-                       MAX(uc.change_timestamp) as last_change
-                FROM users u
-                LEFT JOIN user_changes uc ON u.id = uc.user_id 
-                WHERE (u.vehicle_registration IS NOT NULL AND u.vehicle_registration != '')
-                   OR (u.vehicle_registration_2 IS NOT NULL AND u.vehicle_registration_2 != '')
-                AND (uc.field_name IN ('vehicle_registration', 'vehicle_registration_2') OR uc.field_name IS NULL)
-                GROUP BY u.id, u.full_name, u.erf_number, u.vehicle_registration, u.vehicle_registration_2
-                ORDER BY last_change DESC, u.erf_number
-            ''')
-            
-            export_data = []
-            for row in cursor.fetchall():
-                # Add primary vehicle
-                if row[3]:  # vehicle_registration
-                    export_data.append({
-                        'erf_number': row[2],
-                        'resident_name': row[1],
-                        'vehicle_registration': row[3],
-                        'vehicle_type': 'primary',
-                        'last_updated': row[5] or 'Initial data'
-                    })
-                
-                # Add secondary vehicle
-                if row[4]:  # vehicle_registration_2
-                    export_data.append({
-                        'erf_number': row[2],
-                        'resident_name': row[1],
-                        'vehicle_registration': row[4],
-                        'vehicle_type': 'secondary',
-                        'last_updated': row[5] or 'Initial data'
-                    })
-            
-            return jsonify({
-                'success': True,
-                'export_type': 'camera_identification_system',
-                'data': export_data,
-                'count': len(export_data),
-                'instructions': 'Import this data into your camera system for automated boom gate access'
-            })
-            
-        else:  # export_type == 'all'
-            # Export both datasets
-            # ... (implement combined export)
-            return jsonify({
-                'success': True,
-                'message': 'Use ?type=accentronix or ?type=camera for specific exports'
-            })
-        
-        conn.close()
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to export data: {str(e)}'}), 500
-
-@admin_notifications.route('/admin/changes/mark-exported', methods=['POST'])
-@admin_required
-def mark_as_exported():
-    """Mark changes as exported to external systems"""
-    try:
-        data = request.json
-        change_ids = data.get('change_ids', [])
-        export_type = data.get('export_type', 'manual')
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        placeholders = ','.join(['?' for _ in change_ids])
-        cursor.execute(f'''
-            UPDATE user_changes 
-            SET exported_to_external = TRUE, 
-                export_timestamp = CURRENT_TIMESTAMP,
-                notes = COALESCE(notes || ' | Exported to ' || ?, 'Exported to ' || ?)
-            WHERE id IN ({placeholders})
-        ''', [export_type, export_type] + change_ids)
-        
-        conn.commit()
-        conn.close()
-        
-        return jsonify({
-            'success': True,
-            'message': f'Marked {len(change_ids)} changes as exported to {export_type}'
-        })
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to mark as exported: {str(e)}'}), 500
-
-@admin_notifications.route('/admin/changes/stats', methods=['GET'])
+@admin_notifications.route("/admin/changes/stats", methods=["GET"])
 @admin_required
 def get_change_stats():
-    """Get statistics about recent changes"""
+    """Counts used by the dashboard."""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # Get stats for different time periods
-        stats = {}
-        
-        # Today's changes
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_changes 
-            WHERE DATE(change_timestamp) = DATE('now')
-        ''')
-        stats['today'] = cursor.fetchone()[0]
-        
-        # This week's changes
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_changes 
-            WHERE change_timestamp >= DATE('now', '-7 days')
-        ''')
-        stats['this_week'] = cursor.fetchone()[0]
-        
-        # Critical changes pending
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_changes 
-            WHERE field_name IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')
-            AND admin_reviewed = FALSE
-        ''')
-        stats['critical_pending'] = cursor.fetchone()[0]
-        
-        # Non-critical changes pending
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_changes 
-            WHERE field_name NOT IN ('cellphone_number', 'vehicle_registration', 'vehicle_registration_2')
-            AND admin_reviewed = FALSE
-        ''')
-        stats['non_critical_pending'] = cursor.fetchone()[0]
-        
-        # Total unreviewed
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_changes 
-            WHERE admin_reviewed = FALSE
-        ''')
-        stats['total_pending'] = cursor.fetchone()[0]
-        
-        # Get breakdown by change type
-        cursor.execute('''
-            SELECT change_type, COUNT(*) FROM user_changes 
-            WHERE admin_reviewed = FALSE
-            GROUP BY change_type
-        ''')
-        stats['by_change_type'] = dict(cursor.fetchall())
-        
-        # Get breakdown by field type
-        cursor.execute('''
-            SELECT field_name, COUNT(*) FROM user_changes 
-            WHERE admin_reviewed = FALSE
-            GROUP BY field_name
-            ORDER BY COUNT(*) DESC
-        ''')
-        stats['by_field_name'] = dict(cursor.fetchall())
-        
-        conn.close()
-        
+        # today
+        today_count = UserChange.query.filter(
+            db.func.date(UserChange.change_timestamp) == db.func.current_date()
+        ).count()
+
+        # last 7 days
+        week_count = UserChange.query.filter(
+            UserChange.change_timestamp >= db.func.datetime(db.func.current_timestamp(), "-7 days")
+        ).count()
+
+        critical_fields = ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
+
+        critical_pending = UserChange.query.filter(
+            UserChange.field_name.in_(critical_fields),
+            UserChange.admin_reviewed.is_(False),
+        ).count()
+
+        non_critical_pending = UserChange.query.filter(
+            ~UserChange.field_name.in_(critical_fields),
+            UserChange.admin_reviewed.is_(False),
+        ).count()
+
+        total_pending = UserChange.query.filter(
+            UserChange.admin_reviewed.is_(False)
+        ).count()
+
+        # breakdowns
+        by_change_type = {
+            k: v for k, v in db.session.query(
+                UserChange.change_type, db.func.count(UserChange.id)
+            ).filter(
+                UserChange.admin_reviewed.is_(False)
+            ).group_by(UserChange.change_type).all()
+        }
+
+        by_field_name = {
+            k: v for k, v in db.session.query(
+                UserChange.field_name, db.func.count(UserChange.id)
+            ).filter(
+                UserChange.admin_reviewed.is_(False)
+            ).group_by(UserChange.field_name).order_by(db.func.count(UserChange.id).desc()).all()
+        }
+
         return jsonify({
-            'success': True,
-            'stats': stats
-        })
-        
+            "success": True,
+            "stats": {
+                "today": today_count,
+                "this_week": week_count,
+                "critical_pending": critical_pending,
+                "non_critical_pending": non_critical_pending,
+                "total_pending": total_pending,
+                "by_change_type": by_change_type,
+                "by_field_name": by_field_name,
+            }
+        }), 200
     except Exception as e:
-        return jsonify({'error': f'Failed to get stats: {str(e)}'}), 500
+        return jsonify({"error": f"Failed to get stats: {e}"}), 500
 
-# Initialize the change tracking table when the module is imported
-import os
-if os.getenv("ENABLE_CHANGE_TRACKING", "false").lower() == "true":
-    init_change_tracking_table()
 
+@admin_notifications.route("/admin/changes/critical", methods=["GET"])
+@admin_required
+def get_critical_changes():
+    try:
+        critical_fields = ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
+        rows = UserChange.query.filter(
+            UserChange.field_name.in_(critical_fields),
+            UserChange.admin_reviewed.is_(False),
+        ).order_by(UserChange.change_timestamp.desc()).all()
+
+        return jsonify({
+            "success": True,
+            "critical_changes": [serialize_change(r) for r in rows],
+            "count": len(rows),
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch critical changes: {e}"}), 500
+
+
+@admin_notifications.route("/admin/changes/non-critical", methods=["GET"])
+@admin_required
+def get_non_critical_changes():
+    try:
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 50, type=int)
+        show_reviewed = request.args.get("show_reviewed", "false").lower() == "true"
+
+        q = UserChange.query.filter(~UserChange.field_name.in_(
+            ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
+        ))
+        if not show_reviewed:
+            q = q.filter(UserChange.admin_reviewed.is_(False))
+
+        total = q.count()
+        rows = q.order_by(UserChange.change_timestamp.desc()) \
+                .limit(per_page).offset((page - 1) * per_page).all()
+
+        total_pages = (total + per_page - 1) // per_page
+
+        return jsonify({
+            "success": True,
+            "non_critical_changes": [serialize_change(r) for r in rows],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_count": total,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            },
+            "count": len(rows),
+            "total_pending": total,
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch non-critical changes: {e}"}), 500
+
+
+@admin_notifications.route("/admin/changes/pending", methods=["GET"])
+@admin_required
+def get_pending_changes():
+    """All unreviewed changes, critical first."""
+    try:
+        page = request.args.get("page", 1, type=int)
+        per_page = request.args.get("per_page", 50, type=int)
+
+        priority = case(
+            (
+                UserChange.field_name.in_(("cellphone_number", "vehicle_registration", "vehicle_registration_2")),
+                0
+            ),
+            else_=1
+        )
+
+        q = UserChange.query.filter(UserChange.admin_reviewed.is_(False))
+        total = q.count()
+        rows = q.order_by(priority, desc(UserChange.change_timestamp)) \
+                .limit(per_page).offset((page - 1) * per_page).all()
+
+        total_pages = (total + per_page - 1) // per_page
+
+        # critical count
+        critical_count = UserChange.query.filter(
+            UserChange.admin_reviewed.is_(False),
+            UserChange.field_name.in_(("cellphone_number", "vehicle_registration", "vehicle_registration_2")),
+        ).count()
+
+        return jsonify({
+            "success": True,
+            "changes": [serialize_change(r) for r in rows],
+            "pagination": {
+                "page": page,
+                "per_page": per_page,
+                "total_count": total,
+                "total_pages": total_pages,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            },
+            "total_pending": total,
+            "critical_pending": critical_count,
+            "showing_count": len(rows),
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to get pending changes: {e}"}), 500
+
+
+@admin_notifications.route("/admin/changes/review", methods=["POST"])
+@admin_required
+def review_changes():
+    """Mark changes as reviewed (simple boolean toggle)."""
+    try:
+        change_ids = (request.json or {}).get("change_ids", [])
+        if not change_ids:
+            return jsonify({"error": "No change IDs provided"}), 400
+
+        # Update in bulk
+        UserChange.query.filter(UserChange.id.in_(change_ids)).update(
+            {UserChange.admin_reviewed: True}, synchronize_session=False
+        )
+        db.session.commit()
+        return jsonify({"success": True, "message": f"Reviewed {len(change_ids)} changes"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to review changes: {e}"}), 500

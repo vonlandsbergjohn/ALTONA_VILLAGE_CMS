@@ -67,6 +67,16 @@ def create_app() -> Flask:
     JWTManager(app)
     db.init_app(app)
 
+    # --- Ensure the `user_changes` table exists (for admin notifications) ----
+    try:
+        # Import here to avoid circular imports during app setup
+        from src.models.user_change import ensure_user_changes_table
+        with app.app_context():
+            ensure_user_changes_table()
+    except Exception as e:
+        # Don't hard-crash the app if this helper fails; log it so we can debug
+        app.logger.exception("Failed to ensure user_changes table: %s", e)
+
     # ---- Logging (helpful in Render logs) -----------------------------------
     logging.basicConfig(level=logging.INFO)
     app.logger.info("App starting with DB: %s", app.config["SQLALCHEMY_DATABASE_URI"])
