@@ -589,32 +589,58 @@ def get_all_properties():
     admin_check = admin_required()
     if admin_check:
         return admin_check
-    
+
     try:
         properties = Property.query.all()
-        result = []
-        
-        for prop in properties:
-            prop_data = prop.to_dict()
-            
-            # Add resident information
-            if prop.resident:
-                prop_data['resident'] = prop.resident.to_dict()
-            
-            # Add builder information
-            if prop.builder:
-                prop_data['builder'] = prop.builder.to_dict()
-            
-            # Add meter information
-            if prop.meters:
-                prop_data['meters'] = [meter.to_dict() for meter in prop.meters]
-            
-            result.append(prop_data)
-        
-        return jsonify(result), 200
-        
+        out = []
+
+        for p in properties:
+            pd = p.to_dict() if hasattr(p, "to_dict") else {}
+
+            # normalize property date-ish fields
+            for k in ("plot_registered_date", "created_at", "updated_at"):
+                v = pd.get(k)
+                if hasattr(v, "isoformat"):
+                    pd[k] = v.isoformat()
+
+            # resident (guard None)
+            if getattr(p, "resident", None):
+                rd = p.resident.to_dict() if hasattr(p.resident, "to_dict") else {}
+                for k in ("created_at", "updated_at"):
+                    v = rd.get(k)
+                    if hasattr(v, "isoformat"):
+                        rd[k] = v.isoformat()
+                pd["resident"] = rd
+
+            # builder (guard None)
+            if getattr(p, "builder", None):
+                bd = p.builder.to_dict() if hasattr(p.builder, "to_dict") else {}
+                for k in ("building_start_date", "building_end_date", "created_at", "updated_at"):
+                    v = bd.get(k)
+                    if hasattr(v, "isoformat"):
+                        bd[k] = v.isoformat()
+                pd["builder"] = bd
+
+            # meters (guard None)
+            meters_list = []
+            if getattr(p, "meters", None):
+                for m in p.meters:
+                    md = m.to_dict() if hasattr(m, "to_dict") else {}
+                    for k in ("installation_date", "created_at", "updated_at"):
+                        v = md.get(k)
+                        if hasattr(v, "isoformat"):
+                            md[k] = v.isoformat()
+                    meters_list.append(md)
+            if meters_list:
+                pd["meters"] = meters_list
+
+            out.append(pd)
+
+        return jsonify(out), 200
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 @admin_bp.route('/properties', methods=['POST'])
 @jwt_required()
@@ -710,25 +736,49 @@ def get_all_complaints():
     admin_check = admin_required()
     if admin_check:
         return admin_check
-    
+
     try:
         complaints = Complaint.query.all()
         result = []
-        
-        for complaint in complaints:
-            complaint_data = complaint.to_dict()
-            complaint_data['resident'] = complaint.resident.to_dict()
-            
-            # Add updates
-            if complaint.updates:
-                complaint_data['updates'] = [update.to_dict() for update in complaint.updates]
-            
-            result.append(complaint_data)
-        
+
+        for c in complaints:
+            # base dict
+            cd = c.to_dict() if hasattr(c, "to_dict") else {}
+
+            # normalize likely datetime/date fields
+            for k in ("created_at", "updated_at", "resolved_at"):
+                v = cd.get(k)
+                if hasattr(v, "isoformat"):
+                    cd[k] = v.isoformat()
+
+            # resident (guard None)
+            if getattr(c, "resident", None):
+                rd = c.resident.to_dict() if hasattr(c.resident, "to_dict") else {}
+                # normalize resident datetimes if any
+                for k in ("created_at", "updated_at"):
+                    v = rd.get(k)
+                    if hasattr(v, "isoformat"):
+                        rd[k] = v.isoformat()
+                cd["resident"] = rd
+
+            # updates (guard None)
+            if getattr(c, "updates", None):
+                updates = []
+                for u in c.updates:
+                    ud = u.to_dict() if hasattr(u, "to_dict") else {}
+                    for k in ("created_at", "updated_at"):
+                        v = ud.get(k)
+                        if hasattr(v, "isoformat"):
+                            ud[k] = v.isoformat()
+                    updates.append(ud)
+                cd["updates"] = updates
+
+            result.append(cd)
+
         return jsonify(result), 200
-        
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 @admin_bp.route('/complaints/<complaint_id>/update', methods=['POST'])
 @jwt_required()
