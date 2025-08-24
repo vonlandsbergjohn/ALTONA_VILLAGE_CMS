@@ -761,48 +761,64 @@ def get_all_complaints():
     if admin_check:
         return admin_check
 
+    def iso(v):
+        return v.isoformat() if hasattr(v, "isoformat") else v
+
     try:
-        complaints = Complaint.query.all()
-        result = []
+        rows = Complaint.query.all()
+        out = []
 
-        for c in complaints:
-            # base dict
-            cd = c.to_dict() if hasattr(c, "to_dict") else {}
+        for c in rows:
+            try:
+                item = {
+                    "id": c.id,
+                    "title": getattr(c, "title", "") or "",
+                    "description": getattr(c, "description", "") or "",
+                    "status": getattr(c, "status", "") or "",
+                    "priority": getattr(c, "priority", "") or "",
+                    "created_at": iso(getattr(c, "created_at", None)),
+                    "updated_at": iso(getattr(c, "updated_at", None)),
+                }
 
-            # normalize likely datetime/date fields
-            for k in ("created_at", "updated_at", "resolved_at"):
-                v = cd.get(k)
-                if hasattr(v, "isoformat"):
-                    cd[k] = v.isoformat()
+                # resident (flattened & guarded)
+                if getattr(c, "resident", None):
+                    r = c.resident
+                    item["resident"] = {
+                        "id": r.id,
+                        "first_name": r.first_name or "",
+                        "last_name": r.last_name or "",
+                        "phone_number": r.phone_number or "",
+                        "erf_number": r.erf_number or "",
+                        "full_address": r.full_address or "",
+                    }
 
-            # resident (guard None)
-            if getattr(c, "resident", None):
-                rd = c.resident.to_dict() if hasattr(c.resident, "to_dict") else {}
-                # normalize resident datetimes if any
-                for k in ("created_at", "updated_at"):
-                    v = rd.get(k)
-                    if hasattr(v, "isoformat"):
-                        rd[k] = v.isoformat()
-                cd["resident"] = rd
-
-            # updates (guard None)
-            if getattr(c, "updates", None):
+                # updates (flattened & guarded)
                 updates = []
-                for u in c.updates:
-                    ud = u.to_dict() if hasattr(u, "to_dict") else {}
-                    for k in ("created_at", "updated_at"):
-                        v = ud.get(k)
-                        if hasattr(v, "isoformat"):
-                            ud[k] = v.isoformat()
-                    updates.append(ud)
-                cd["updates"] = updates
+                if getattr(c, "updates", None):
+                    for u in c.updates:
+                        updates.append({
+                            "id": u.id,
+                            "user_id": getattr(u, "user_id", None),
+                            "update_text": getattr(u, "update_text", "") or "",
+                            "created_at": iso(getattr(u, "created_at", None)),
+                        })
+                if updates:
+                    item["updates"] = updates
 
-            result.append(cd)
+                out.append(item)
 
-        return jsonify(result), 200
+            except Exception as row_err:
+                # keep going even if one row is odd
+                out.append({
+                    "id": getattr(c, "id", None),
+                    "error": f"row_build_failed: {row_err}",
+                })
+
+        return jsonify(out), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @admin_bp.route('/complaints/<complaint_id>/update', methods=['POST'])
 @jwt_required()
