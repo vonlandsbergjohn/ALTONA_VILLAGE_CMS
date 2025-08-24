@@ -3,9 +3,8 @@ from datetime import timedelta
 from flask import Blueprint, request, jsonify
 from flask_cors import cross_origin
 from flask_jwt_extended import (
-    create_access_token,
-    jwt_required,
-    get_jwt_identity,
+    create_access_token, jwt_required, get_jwt_identity, get_jwt,  # whatever you already have
+    verify_jwt_in_request,  # <-- add this
 )
 from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
@@ -175,10 +174,16 @@ def register():
 
 
 @auth_bp.route("/login", methods=["POST", "OPTIONS"])
-@cross_origin(supports_credentials=True)
+@cross_origin(
+    supports_credentials=True,
+    origins=["https://altona-village-frontend.onrender.com"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 def login():
     if request.method == "OPTIONS":
         return ("", 204)
+    ...
+
     """
     Admin can ALWAYS log in, even if status isn't 'active' (we auto-activate them).
     All other roles must be 'active'.
@@ -222,9 +227,20 @@ def login():
         return jsonify({"error": str(e)}), 500
 
 
-@auth_bp.route("/profile", methods=["GET"])
-@jwt_required()
+@auth_bp.route("/profile", methods=["GET", "OPTIONS"])
+@cross_origin(
+    supports_credentials=True,
+    origins=["https://altona-village-frontend.onrender.com"]  # your frontend URL
+)
 def profile():
+    if request.method == "OPTIONS":
+        return ("", 204)  # allow CORS preflight
+
+    verify_jwt_in_request()          # <-- replaces the old @jwt_required()
+    user_id = get_jwt_identity()
+
+    # ... keep your existing code below unchanged ...
+
     """
     Returns a consolidated profile for all accounts sharing the same email:
     a list of ERFs with role/status/type details plus legacy fields for the UI.
@@ -328,9 +344,20 @@ def profile():
     return jsonify(profile_data), 200
 
 
-@auth_bp.route("/profile", methods=["PUT"])
-@jwt_required()
+@auth_bp.route("/profile", methods=["PUT", "OPTIONS"])
+@cross_origin(
+    supports_credentials=True,
+    origins=["https://altona-village-frontend.onrender.com"]
+)
 def update_profile():
+    if request.method == "OPTIONS":
+        return ("", 204)
+
+    verify_jwt_in_request()
+    user_id = get_jwt_identity()
+
+    # ... keep your existing code below unchanged ...
+
     """
     Minimal, safe profile updater. Updates only known Resident/Owner fields if present.
     Logs changes via admin_notifications (if available).
