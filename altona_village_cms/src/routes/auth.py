@@ -3,13 +3,14 @@ from datetime import timedelta
 from flask import Blueprint, request, jsonify
 from flask_cors import cross_origin
 from flask_jwt_extended import (
-    create_access_token, jwt_required, get_jwt_identity, get_jwt,  # whatever you already have
-    verify_jwt_in_request,  # <-- add this
+    create_access_token,
+    get_jwt_identity,
+    verify_jwt_in_request,
 )
 from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
 
-# Try to import change logging (won't fail app if module isn't present)
+# Best-effort import for logging user changes. If unavailable, no-op.
 try:
     from src.routes.admin_notifications import log_user_change
 except Exception:
@@ -43,7 +44,7 @@ def parse_address(address: str):
             for i, part in enumerate(parts):
                 if part.isdigit():
                     street_number = part
-                    street_name = " ".join(parts[:i] + parts[i + 1 :]).strip()
+                    street_name = " ".join(parts[:i] + parts[i + 1:]).strip()
                     break
             if not street_number:
                 street_name = address
@@ -176,13 +177,15 @@ def register():
 @auth_bp.route("/login", methods=["POST", "OPTIONS"])
 @cross_origin(
     supports_credentials=True,
-    origins=["https://altona-village-frontend.onrender.com"],
+    origins=[
+        "https://altona-village-frontend.onrender.com",
+        "http://localhost:5173",  # helpful for local dev; safe to keep
+    ],
     allow_headers=["Authorization", "Content-Type"],
 )
 def login():
     if request.method == "OPTIONS":
         return ("", 204)
-    ...
 
     """
     Admin can ALWAYS log in, even if status isn't 'active' (we auto-activate them).
@@ -230,22 +233,22 @@ def login():
 @auth_bp.route("/profile", methods=["GET", "OPTIONS"])
 @cross_origin(
     supports_credentials=True,
-    origins=["https://altona-village-frontend.onrender.com"]  # your frontend URL
+    origins=[
+        "https://altona-village-frontend.onrender.com",
+        "http://localhost:5173",
+    ],
 )
 def profile():
     if request.method == "OPTIONS":
         return ("", 204)  # allow CORS preflight
 
-    verify_jwt_in_request()          # <-- replaces the old @jwt_required()
+    verify_jwt_in_request()          # replaces the old @jwt_required()
     user_id = get_jwt_identity()
-
-    # ... keep your existing code below unchanged ...
 
     """
     Returns a consolidated profile for all accounts sharing the same email:
     a list of ERFs with role/status/type details plus legacy fields for the UI.
     """
-    user_id = get_jwt_identity()
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
@@ -347,26 +350,25 @@ def profile():
 @auth_bp.route("/profile", methods=["PUT", "OPTIONS"])
 @cross_origin(
     supports_credentials=True,
-    origins=["https://altona-village-frontend.onrender.com"]
+    origins=[
+        "https://altona-village-frontend.onrender.com",
+        "http://localhost:5173",
+    ],
 )
 def update_profile():
     if request.method == "OPTIONS":
         return ("", 204)
 
     verify_jwt_in_request()
-    user_id = get_jwt_identity()
-
-    # ... keep your existing code below unchanged ...
+    current_user = User.query.get(get_jwt_identity())
+    if not current_user:
+        return jsonify({"error": "User not found"}), 404
 
     """
     Minimal, safe profile updater. Updates only known Resident/Owner fields if present.
     Logs changes via admin_notifications (if available).
     """
     try:
-        current_user = User.query.get(get_jwt_identity())
-        if not current_user:
-            return jsonify({"error": "User not found"}), 404
-
         data = request.get_json() or {}
 
         def _track(field_name, old_value, new_value, change_type="profile_update"):
@@ -388,8 +390,8 @@ def update_profile():
                     erf_number=erf_number,
                     change_type=change_type,
                     field_name=field_name,
-                    old_value=str(old_value) if old_value else "",
-                    new_value=str(new_value) if new_value else "",
+                    old_value=str(old_value) if old_value is not None else "",
+                    new_value=str(new_value) if new_value is not None else "",
                 )
             except Exception as e:
                 print(f"Failed to log change for {field_name}: {e}")
