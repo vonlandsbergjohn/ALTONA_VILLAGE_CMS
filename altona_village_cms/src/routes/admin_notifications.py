@@ -1,7 +1,7 @@
 # src/routes/admin_notifications.py
 # Admin Notifications Route - Track Critical User Updates (SQLAlchemy version)
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from datetime import datetime
@@ -9,9 +9,10 @@ from typing import Optional
 
 from sqlalchemy import case, desc
 from src.models.user import db, User, Resident, Owner  # include Resident/Owner to resolve ERF
-from src.models.user_change import UserChange  # the model/table
+# IMPORTANT: do NOT import UserChange at module import time; we lazy-import inside functions
+# from src.models.user_change import UserChange
 
-admin_notifications = Blueprint('admin_notifications', __name__)
+admin_notifications = Blueprint("admin_notifications", __name__)
 
 # ---------------------------- helpers ---------------------------------
 def admin_required(f):
@@ -45,7 +46,8 @@ def _resolve_erf_for_user(user_id: str) -> Optional[str]:
     return None
 
 
-def serialize_change(c: UserChange) -> dict:
+def serialize_change(c) -> dict:
+    # Works whether c is a model instance that *has* erf_number or not
     erf = getattr(c, "erf_number", None)
     return {
         "id": c.id,
@@ -54,8 +56,8 @@ def serialize_change(c: UserChange) -> dict:
         "field_name": c.field_name,
         "old_value": c.old_value,
         "new_value": c.new_value,
-        "change_timestamp": (c.change_timestamp.isoformat() if c.change_timestamp else None),
-        "admin_reviewed": bool(c.admin_reviewed),
+        "change_timestamp": (c.change_timestamp.isoformat() if getattr(c, "change_timestamp", None) else None),
+        "admin_reviewed": bool(getattr(c, "admin_reviewed", False)),
         # ERF for UI
         "erf_number": erf,
         "erf": erf,
@@ -64,10 +66,18 @@ def serialize_change(c: UserChange) -> dict:
 
 # Keep the signature used by admin.py, but now store erf_number too
 def log_user_change(user_id, user_name, erf_number, change_type, field_name, old_value, new_value):
+    """
+    Safe, lazy logging of a single change.
+    We import the model *inside* the function so the module can import even if
+    migrations/tables aren’t ready yet (prevents a no-op fallback).
+    """
     try:
+        # Lazy import avoids import-time failures / circular deps
+        from src.models.user_change import UserChange
+
         erf = erf_number or _resolve_erf_for_user(user_id)
 
-        change = UserChange(
+        entry = UserChange(
             user_id=str(user_id),
             field_name=str(field_name),
             old_value=str(old_value) if old_value is not None else None,
@@ -77,13 +87,26 @@ def log_user_change(user_id, user_name, erf_number, change_type, field_name, old
             admin_reviewed=False,
             erf_number=str(erf) if erf else None,
         )
-        db.session.add(change)
+        db.session.add(entry)
         db.session.commit()
+        current_app.logger.info(
+            "Change logged: %s.%s (%s) '%s' → '%s' [user_id=%s, erf=%s]",
+            entry.change_type,
+            entry.field_name,
+            user_name,
+            old_value,
+            new_value,
+            user_id,
+            erf,
+        )
         return True
-    except Exception as e:
-        db.session.rollback()
+    except Exception:
+        current_app.logger.exception("log_user_change failed")
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         # Don’t crash the caller; just report failure
-        print(f"[log_user_change] failed: {e}")
         return False
 
 
@@ -93,13 +116,16 @@ def log_user_change(user_id, user_name, erf_number, change_type, field_name, old
 @admin_required
 def get_change_stats():
     """Counts used by the dashboard."""
+    # 👇 lazy import here fixes the Pylance “UserChange is not defined” warning
+    from src.models.user_change import UserChange
+
     try:
         # today
         today_count = UserChange.query.filter(
             db.func.date(UserChange.change_timestamp) == db.func.current_date()
         ).count()
 
-        # last 7 days
+        # last 7 days (works on SQLite; if you later need cross-DB, switch to date_trunc/interval for Postgres)
         week_count = UserChange.query.filter(
             UserChange.change_timestamp >= db.func.datetime(db.func.current_timestamp(), "-7 days")
         ).count()
@@ -157,6 +183,7 @@ def get_change_stats():
 @admin_required
 def get_critical_changes():
     try:
+        from src.models.user_change import UserChange  # local import for consistency
         critical_fields = ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
         rows = UserChange.query.filter(
             UserChange.field_name.in_(critical_fields),
@@ -183,6 +210,7 @@ def get_critical_changes():
 @admin_required
 def get_non_critical_changes():
     try:
+        from src.models.user_change import UserChange  # local import for consistency
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 50, type=int)
         show_reviewed = request.args.get("show_reviewed", "false").lower() == "true"
@@ -228,6 +256,7 @@ def get_non_critical_changes():
 def get_pending_changes():
     """All unreviewed changes, critical first."""
     try:
+        from src.models.user_change import UserChange  # local import for consistency
         page = request.args.get("page", 1, type=int)
         per_page = request.args.get("per_page", 50, type=int)
 
@@ -282,6 +311,7 @@ def get_pending_changes():
 def review_changes():
     """Mark changes as reviewed (simple boolean toggle)."""
     try:
+        from src.models.user_change import UserChange  # local import for consistency
         change_ids = (request.json or {}).get("change_ids", [])
         if not change_ids:
             return jsonify({"error": "No change IDs provided"}), 400
