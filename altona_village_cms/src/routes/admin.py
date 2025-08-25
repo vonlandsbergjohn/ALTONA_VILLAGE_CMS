@@ -8,7 +8,6 @@ from datetime import datetime
 import io
 import csv
 import os
-import sqlite3
 
 # Test pandas and openpyxl imports at startup
 try:
@@ -1228,263 +1227,91 @@ def get_gate_register_changes():
 @admin_bp.route('/gate-register/export-changes', methods=['GET'])
 @jwt_required()
 def export_gate_register_changes():
-    """Export gate register with only changed users and red highlighting for changed fields"""
-    admin_check = admin_required()
-    if admin_check:
-        return admin_check
-    
+    """Export a simple HTML gate register view that highlights pending (unreviewed) changes in red.
+    Only users with at least one unreviewed change are included.
+    """
     try:
-        # Get gate register changes data
-        import sqlite3
-        db_path = os.path.join(os.path.dirname(__file__), '..', 'database', 'app.db')
-        
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            
-            # Get users who have unreviewed changes
-            cursor.execute("""
-                SELECT DISTINCT user_id, field_name, new_value, old_value, change_timestamp
-                FROM user_changes 
-                WHERE admin_reviewed = 0
-                ORDER BY change_timestamp DESC
-            """)
-            
-            user_changes = cursor.fetchall()
-        
-        if not user_changes:
-            return jsonify({'error': 'No pending changes found to export'}), 404
-        
-        # Group changes by user_id and classify them
-        changes_by_user = {}
-        critical_fields = ['cellphone_number', 'vehicle_registration', 'vehicle_registration_2']
-        
-        for change in user_changes:
-            user_id, field_name, new_value, old_value, timestamp = change
-            if user_id not in changes_by_user:
-                changes_by_user[user_id] = {}
-            
-            is_critical = field_name in critical_fields
-            changes_by_user[user_id][field_name] = {
-                'new_value': new_value,
-                'old_value': old_value,
-                'timestamp': timestamp,
-                'changed': True,
-                'is_critical': is_critical
-            }
-        
-        # Create CSV with change highlighting (HTML format for red backgrounds)
-        output = io.StringIO()
-        
-        # Create HTML table instead of CSV for proper red background formatting
-        html_content = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Gate Register - Changes Only</title>
-    <style>
-        table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; font-weight: bold; }
-        .critical-changed { background-color: #ff6b6b !important; color: white; font-weight: bold; }
-        .non-critical-changed { background-color: #4CAF50 !important; color: white; font-weight: bold; }
-        .header { background-color: #2196F3; color: white; }
-    </style>
-</head>
-<body>
-    <h1>Altona Village - Gate Register Changes</h1>
-    <p>Generated: """ + datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC') + """</p>
-    <p>This document shows only residents/owners with recent changes. Changed information is highlighted in red.</p>
-    
-    <table>
-        <tr class="header">
-            <th>RESIDENT STATUS</th>
-            <th>FIRST NAME</th>
-            <th>SURNAME</th>
-            <th>PHONE NUMBER</th>
-            <th>STREET NR</th>
-            <th>STREET NAME</th>
-            <th>VEHICLE REGISTRATION NR</th>
-            <th>ERF NR</th>
-            <th>INTERCOM NR</th>
-        </tr>
-"""
-        
-        # Get gate register data for users with changes
-        user_ids = list(changes_by_user.keys())
-        
-        # Convert string UUIDs to proper format for querying
-        for user_uuid in user_ids:
-            user = User.query.filter_by(id=user_uuid).first()
-            if not user or user.role == 'admin':
-                continue
-                
-            resident_data = None
-            owner_data = None
-            status = 'Unknown'
-            
-            # Determine user status and get appropriate data
-            if user.resident and user.owner:
-                status = 'Owner-Resident'
-                resident_data = user.resident
-                owner_data = user.owner
-            elif user.resident:
-                status = 'Resident'
-                resident_data = user.resident
-            elif user.owner:
-                status = 'Owner'
-                owner_data = user.owner
-            else:
-                continue
-            
-            # Use the primary data source (resident takes priority)
-            primary_data = resident_data if resident_data else owner_data
-            if not primary_data:
-                continue
-            
-            # Get vehicles
-            vehicle_registrations = []
-            if resident_data:
-                vehicles = Vehicle.query.filter_by(resident_id=resident_data.id).all()
-                vehicle_registrations = [v.registration_number for v in vehicles]
-            elif owner_data:
-                vehicles = Vehicle.query.filter_by(owner_id=owner_data.id).all()
-                vehicle_registrations = [v.registration_number for v in vehicles]
-            
-            # Get changes for this user
-            user_change_info = changes_by_user.get(user_uuid, {})
-            
-            # Check if phone number was changed (critical)
-            phone_change_info = user_change_info.get('cellphone_number', {})
-            phone_changed = 'cellphone_number' in user_change_info
-            current_phone = phone_change_info.get('new_value', primary_data.phone_number or '')
-            phone_is_critical = phone_change_info.get('is_critical', True)
-            
-            # Check if intercom code was changed (non-critical)
-            intercom_change_info = user_change_info.get('intercom_code', {})
-            intercom_changed = 'intercom_code' in user_change_info
-            current_intercom = intercom_change_info.get('new_value', primary_data.intercom_code or '')
-            intercom_is_critical = intercom_change_info.get('is_critical', False)
-            
-            # Check if any vehicle registrations were changed (critical)
-            vehicle_changes = [change for field, change in user_change_info.items() if 'vehicle_registration' in field]
-            
-            if vehicle_registrations:
-                # Create entry for each vehicle
-                for i, vehicle_reg in enumerate(vehicle_registrations):
-                    # Check if this specific vehicle was changed
-                    vehicle_changed = any(change['new_value'] == vehicle_reg for change in vehicle_changes)
-                    
-                    # Determine CSS classes based on change type
-                    phone_class = ''
-                    if phone_changed and i == 0:
-                        phone_class = 'critical-changed' if phone_is_critical else 'non-critical-changed'
-                    
-                    vehicle_class = 'critical-changed' if vehicle_changed else ''
-                    
-                    intercom_class = ''
-                    if intercom_changed and i == 0:
-                        intercom_class = 'non-critical-changed' if not intercom_is_critical else 'critical-changed'
-                    
-                    html_content += f"""
-        <tr>
-            <td>{status}</td>
-            <td>{primary_data.first_name or ''}</td>
-            <td>{primary_data.last_name or ''}</td>
-            <td class="{phone_class}">{current_phone}</td>
-            <td>{primary_data.street_number or ''}</td>
-            <td>{primary_data.street_name or ''}</td>
-            <td class="{vehicle_class}">{vehicle_reg}</td>
-            <td>{primary_data.erf_number or ''}</td>
-            <td class="{intercom_class}">{current_intercom}</td>
-        </tr>"""
-            else:
-                # No vehicles - still include the resident/owner
-                phone_class = ''
-                if phone_changed:
-                    phone_class = 'critical-changed' if phone_is_critical else 'non-critical-changed'
-                
-                intercom_class = ''
-                if intercom_changed:
-                    intercom_class = 'non-critical-changed' if not intercom_is_critical else 'critical-changed'
-                
-                html_content += f"""
-        <tr>
-            <td>{status}</td>
-            <td>{primary_data.first_name or ''}</td>
-            <td>{primary_data.last_name or ''}</td>
-            <td class="{phone_class}">{current_phone}</td>
-            <td>{primary_data.street_number or ''}</td>
-            <td>{primary_data.street_name or ''}</td>
-            <td></td>
-            <td>{primary_data.erf_number or ''}</td>
-            <td class="{intercom_class}">{current_intercom}</td>
-        </tr>"""
-        
-        html_content += """
-    </table>
-    
-    <h2>Change Summary</h2>
-    <ul>"""
-        
-        # Add change summary with color coding
-        critical_changes = []
-        non_critical_changes = []
-        
-        for user_uuid, changes in changes_by_user.items():
-            user = User.query.filter_by(id=user_uuid).first()
-            if user:
-                for field, change_info in changes.items():
-                    change_text = f"<strong>{user.email}</strong> - {field}: Changed from \"{change_info['old_value']}\" to \"{change_info['new_value']}\""
-                    
-                    if change_info.get('is_critical', False):
-                        critical_changes.append(change_text)
-                    else:
-                        non_critical_changes.append(change_text)
-        
-        # Display critical changes
-        if critical_changes:
-            html_content += """
-    <h3 style="color: #ff6b6b;">Critical Changes (Red)</h3>
-    <ul>"""
-            for change in critical_changes:
-                html_content += f"""
-        <li style="color: #ff6b6b;">{change}</li>"""
-            html_content += """
-    </ul>"""
-        
-        # Display non-critical changes
-        if non_critical_changes:
-            html_content += """
-    <h3 style="color: #4CAF50;">Non-Critical Changes (Green)</h3>
-    <ul>"""
-            for change in non_critical_changes:
-                html_content += f"""
-        <li style="color: #4CAF50;">{change}</li>"""
-            html_content += """
-    </ul>"""
-        
-        html_content += """
-    </ul>
-</body>
-</html>"""
-        
-        # Generate filename with timestamp
-        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-        filename = f'gate_register_changes_{timestamp}.html'
-        
-        # Create response
-        return Response(
-            html_content,
-            mimetype='text/html',
-            headers={
-                'Content-Disposition': f'attachment; filename={filename}',
-                'Content-Type': 'text/html; charset=utf-8'
-            }
-        )
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to export gate register changes: {str(e)}'}), 500
+        current_user = User.query.get(get_jwt_identity())
+        if not current_user or current_user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
 
+        # gather unreviewed changes by user
+        from src.models.user_change import UserChange
+        pending = (UserChange.query
+                   .filter(UserChange.admin_reviewed.is_(False))
+                   .order_by(UserChange.change_timestamp.desc())
+                   .all())
+
+        # group fields changed by user_id
+        changed_by_user = {}
+        for c in pending:
+            changed_by_user.setdefault(c.user_id, set()).add((c.field_name or '').lower())
+
+        rows = []
+        for user_id, fields in changed_by_user.items():
+            u = User.query.get(user_id)
+            if not u:
+                continue
+
+            # Resolve a profile holder (resident preferred)
+            person = u.resident or u.owner
+            if not person:
+                continue
+
+            # vehicles list from either resident or owner
+            if u.resident:
+                vehicles = Vehicle.query.filter_by(resident_id=u.resident.id).all()
+            elif u.owner:
+                vehicles = Vehicle.query.filter_by(owner_id=u.owner.id).all()
+            else:
+                vehicles = []
+
+            # flags
+            phone_changed = 'cellphone_number' in fields or 'phone_number' in fields
+            vehicle_changed = 'vehicle_registration' in fields or 'vehicle_registration_2' in fields
+
+            # One row per vehicle (or a blank row if none)
+            if vehicles:
+                for v in vehicles:
+                    rows.append({
+                        'name': f"{(person.first_name or '').strip()} {(person.last_name or '').strip()}",
+                        'street_number': person.street_number or '',
+                        'street_name': person.street_name or '',
+                        'vehicle': v.registration_number or '',
+                        'erf': person.erf_number or '',
+                        'intercom': getattr(person, 'intercom_code', '') or '',
+                        'phone_changed': phone_changed,
+                        'vehicle_changed': vehicle_changed
+                    })
+            else:
+                rows.append({
+                    'name': f"{(person.first_name or '').strip()} {(person.last_name or '').strip()}",
+                    'street_number': person.street_number or '',
+                    'street_name': person.street_name or '',
+                    'vehicle': '',
+                    'erf': person.erf_number or '',
+                    'intercom': getattr(person, 'intercom_code', '') or '',
+                    'phone_changed': phone_changed,
+                    'vehicle_changed': vehicle_changed
+                })
+
+        # Build a trivial HTML table
+        html = ["<html><head><meta charset='utf-8'><title>Gate Register - Changes</title></head><body>"]
+        html.append(f"<h2>Gate Register (Pending Changes: {len(pending)})</h2>")
+        html.append("<table border='1' cellpadding='6' cellspacing='0'>")
+        html.append("<tr><th>NAME</th><th>STREET NR</th><th>STREET NAME</th><th>VEHICLE REGISTRATION</th><th>ERF</th><th>INTERCOM</th></tr>")
+        for r in rows:
+            name_html = f"<span style='color:red;font-weight:bold'>{r['name']}</span>" if r['phone_changed'] else r['name']
+            veh_html = f"<span style='color:red;font-weight:bold'>{r['vehicle']}</span>" if r['vehicle_changed'] else r['vehicle']
+            html.append(
+                f"<tr><td>{name_html}</td><td>{r['street_number']}</td><td>{r['street_name']}</td><td>{veh_html}</td><td>{r['erf']}</td><td>{r['intercom']}</td></tr>"
+            )
+        html.append("</table>")
+        html.append("</body></html>")
+        return html[0] + ''.join(html[1:])
+
+    except Exception as e:
+        return jsonify({'error': f'Failed to export changes: {str(e)}'}), 500
 @admin_bp.route('/communication/emails', methods=['GET'])
 @jwt_required()
 def get_resident_emails():
@@ -1504,74 +1331,43 @@ def get_resident_emails():
 @admin_bp.route('/changes/<change_id>/mark-processed', methods=['POST'])
 @jwt_required()
 def mark_change_processed(change_id):
-    """Mark a change as processed by admin"""
-    admin_check = admin_required()
-    if admin_check:
-        return admin_check
-    
+    """Mark the latest unreviewed change for the given (user_id, field_name) as reviewed.
+    change_id is of the form: {user_uuid}-{field_name}. Field names themselves may contain dashes,
+    so we join the first 5 dash-separated segments as the UUID and treat the rest as the field name.
+    """
     try:
-        # Parse the change_id (format: user_id-field_name)
-        if '-' not in change_id:
-            return jsonify({'error': 'Invalid change ID format'}), 400
-            
-        # Split the change_id - UUID has 4 dashes, so we need to find the 5th dash
-        parts = change_id.split('-')
-        
-        if len(parts) < 6:  # UUID (5 parts) + field_name (at least 1 part)
-            return jsonify({'error': 'Invalid change ID format'}), 400
-            
-        # First 5 parts are the UUID, rest is field_name
-        user_id = '-'.join(parts[:5])  # UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-        field_name = '-'.join(parts[5:])  # Everything after UUID
-        
-        # Update the change record in database
-        import sqlite3
-        db_path = os.path.join(os.path.dirname(__file__), '..', 'database', 'app.db')
-        
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            
-            # First check if the change exists
-            cursor.execute("""
-                SELECT id FROM user_changes 
-                WHERE user_id = ? AND field_name = ? AND admin_reviewed = 0
-                ORDER BY change_timestamp DESC
-                LIMIT 1
-            """, (user_id, field_name))
-            
-            result = cursor.fetchone()
-            
-            if not result:
-                return jsonify({'error': 'Change not found or already processed'}), 404
-            
-            # Mark the most recent unreviewed change for this user and field as reviewed
-            cursor.execute("""
-                UPDATE user_changes 
-                SET admin_reviewed = 1 
-                WHERE id = (
-                    SELECT id FROM user_changes 
-                    WHERE user_id = ? AND field_name = ? AND admin_reviewed = 0
-                    ORDER BY change_timestamp DESC
-                    LIMIT 1
-                )
-            """, (user_id, field_name))
-            
-            if cursor.rowcount == 0:
-                return jsonify({'error': 'Change not found or already processed'}), 404
-            
-            conn.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Change marked as processed'
-        }), 200
-        
-    except Exception as e:
-        return jsonify({'error': f'Internal server error: {str(e)}'}), 500
-        
-    except Exception as e:
-        return jsonify({'error': f'Failed to mark change as processed: {str(e)}'}), 500
+        current_user = User.query.get(get_jwt_identity())
+        if not current_user or current_user.role != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
 
+        parts = (change_id or '').split('-')
+        if len(parts) < 6:
+            return jsonify({'error': 'Invalid change_id format'}), 400
+
+        user_id = '-'.join(parts[:5])      # UUID has 4 dashes, 5 segments
+        field_name = '-'.join(parts[5:])   # remainder is the field name
+
+        # SQLAlchemy / Postgres path
+        from src.models.user_change import UserChange
+
+        change = (UserChange.query
+                  .filter_by(user_id=user_id, field_name=field_name, admin_reviewed=False)
+                  .order_by(UserChange.change_timestamp.desc())
+                  .first())
+        if not change:
+            return jsonify({'error': 'Change not found or already processed'}), 404
+
+        change.admin_reviewed = True
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Change marked as processed', 'id': change.id}), 200
+
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': f'Failed to mark change as processed: {str(e)}'}), 500
 @admin_bp.route('/communication/phones', methods=['GET'])
 @jwt_required()
 def get_resident_phones():
@@ -2636,4 +2432,3 @@ def get_deletion_logs():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
