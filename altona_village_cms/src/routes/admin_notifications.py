@@ -130,7 +130,7 @@ def get_change_stats():
             UserChange.change_timestamp >= db.func.datetime(db.func.current_timestamp(), "-7 days")
         ).count()
 
-        critical_fields = ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
+        critical_fields = ("phone_number", "vehicle_registration", "vehicle_registration_2")
 
         critical_pending = UserChange.query.filter(
             UserChange.field_name.in_(critical_fields),
@@ -184,7 +184,7 @@ def get_change_stats():
 def get_critical_changes():
     try:
         from src.models.user_change import UserChange  # local import for consistency
-        critical_fields = ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
+        critical_fields = ("phone_number", "vehicle_registration", "vehicle_registration_2")
         rows = UserChange.query.filter(
             UserChange.field_name.in_(critical_fields),
             UserChange.admin_reviewed.is_(False),
@@ -262,7 +262,7 @@ def get_pending_changes():
 
         priority = case(
             (
-                UserChange.field_name.in_(("cellphone_number", "vehicle_registration", "vehicle_registration_2")),
+                UserChange.field_name.in_(("phone_number", "vehicle_registration", "vehicle_registration_2")),
                 0
             ),
             else_=1
