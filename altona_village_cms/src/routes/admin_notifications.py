@@ -11,6 +11,38 @@ from sqlalchemy import case, desc
 from src.models.user import db, User, Resident, Owner  # include Resident/Owner to resolve ERF
 # IMPORTANT: do NOT import UserChange at module import time; we lazy-import inside functions
 # from src.models.user_change import UserChange
+# --- PATCH A: add once near the top ---
+# Map common variants to the names your UI expects
+CRITICAL_FIELDS = ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
+
+_FIELD_NAME_MAP = {
+    "phone": "cellphone_number",
+    "phone_number": "cellphone_number",
+    "cell": "cellphone_number",
+    "cell_number": "cellphone_number",
+    "cellphone_number": "cellphone_number",
+    "vehicle_registration": "vehicle_registration",
+    "vehicle_registration_2": "vehicle_registration_2",
+    "vehicle_1": "vehicle_registration",
+    "vehicle_2": "vehicle_registration_2",
+    "intercom": "intercom_code",
+    "intercom_code": "intercom_code",
+    "first_name": "first_name",
+    "last_name": "last_name",
+    "id_number": "id_number",
+    "property_address": "property_address",
+    "street_name": "street_name",
+    "street_number": "street_number",
+    "erf_number": "erf_number",
+    "email": "email",
+}
+
+def normalize_field_name(name: str) -> str:
+    if not name:
+        return name
+    key = name.strip()
+    return _FIELD_NAME_MAP.get(key, key)
+# --- end PATCH A ---
 
 admin_notifications = Blueprint("admin_notifications", __name__)
 
