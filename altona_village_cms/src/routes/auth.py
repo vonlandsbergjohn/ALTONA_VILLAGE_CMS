@@ -10,12 +10,14 @@ from flask_jwt_extended import (
 from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
 
-# Best-effort import for logging user changes. If unavailable, no-op.
+# Prefer importing the real logger + normalizer; fallback to safe no-ops
 try:
-    from src.routes.admin_notifications import log_user_change
+    from src.routes.admin_notifications import log_user_change, normalize_field_name
 except Exception:
     def log_user_change(*args, **kwargs):
         pass
+    def normalize_field_name(name: str) -> str:
+        return name
 
 
 def parse_address(address: str):
@@ -316,12 +318,18 @@ def profile():
 
         erfs.append(base)
 
-        # choose first ACTIVE account as "primary profile", else fallback later
+        # choose first ACTIVE account as "primary profile" (temporary)
         if not primary_profile and acct.status == "active":
             primary_profile = base.copy()
 
-    if not primary_profile and erfs:
-        primary_profile = erfs[0]
+    # --- PATCH: prefer Resident / Owner-Resident for banner fields ---
+    if erfs:
+        preferred = next((e for e in erfs if e.get("type") in ("resident", "owner-resident")), None)
+        if preferred:
+            primary_profile = preferred.copy()
+        elif not primary_profile:
+            primary_profile = erfs[0]
+    # ----------------------------------------------------------------
 
     profile_data = {
         "id": user.id,
@@ -372,17 +380,25 @@ def update_profile():
         data = request.get_json() or {}
 
         def _track(field_name, old_value, new_value, change_type="profile_update"):
+            # Only record when the value truly changes
             if old_value == new_value:
                 return
+
+            # Normalize to the names Admin expects (e.g. phone_number -> cellphone_number)
+            field_name = normalize_field_name(field_name)
+
+            # Build a friendly name and ERF
             user_name = (
                 f"{getattr(current_user.resident, 'first_name', '') or getattr(current_user.owner, 'first_name', '')} "
                 f"{getattr(current_user.resident, 'last_name', '') or getattr(current_user.owner, 'last_name', '')}"
-            ).strip()
+            ).strip() or (current_user.email or "Unknown")
+
             erf_number = (
                 getattr(current_user.resident, "erf_number", "")
                 or getattr(current_user.owner, "erf_number", "")
                 or "Unknown"
             )
+
             try:
                 log_user_change(
                     user_id=current_user.id,
@@ -394,6 +410,7 @@ def update_profile():
                     new_value=str(new_value) if new_value is not None else "",
                 )
             except Exception as e:
+                # Do not break the update flow due to logging
                 print(f"Failed to log change for {field_name}: {e}")
 
         # Update Resident fields if exists
