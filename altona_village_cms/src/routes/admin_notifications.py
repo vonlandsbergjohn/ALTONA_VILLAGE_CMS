@@ -216,7 +216,7 @@ def get_change_stats():
 def get_critical_changes():
     try:
         from src.models.user_change import UserChange  # local import for consistency
-        critical_fields = ("phone_number", "vehicle_registration", "vehicle_registration_2")
+        critical_fields = CRITICAL_FIELDS
         rows = UserChange.query.filter(
             UserChange.field_name.in_(critical_fields),
             UserChange.admin_reviewed.is_(False),
