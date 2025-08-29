@@ -111,7 +111,7 @@ def log_user_change(user_id, user_name, erf_number, change_type, field_name, old
 
         entry = UserChange(
             user_id=str(user_id),
-            field_name=str(field_name),
+            field_name=normalize_field_name(field_name),
             old_value=str(old_value) if old_value is not None else None,
             new_value=str(new_value) if new_value is not None else None,
             change_type=str(change_type or "update"),
