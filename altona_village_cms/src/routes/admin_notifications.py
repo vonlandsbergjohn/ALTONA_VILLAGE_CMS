@@ -162,7 +162,7 @@ def get_change_stats():
             UserChange.change_timestamp >= db.func.datetime(db.func.current_timestamp(), "-7 days")
         ).count()
 
-        critical_fields = ("phone_number", "vehicle_registration", "vehicle_registration_2")
+        critical_fields = CRITICAL_FIELDS
 
         critical_pending = UserChange.query.filter(
             UserChange.field_name.in_(critical_fields),
