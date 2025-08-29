@@ -247,9 +247,8 @@ def get_non_critical_changes():
         per_page = request.args.get("per_page", 50, type=int)
         show_reviewed = request.args.get("show_reviewed", "false").lower() == "true"
 
-        q = UserChange.query.filter(~UserChange.field_name.in_(
-            ("cellphone_number", "vehicle_registration", "vehicle_registration_2")
-        ))
+        q = UserChange.query.filter(~UserChange.field_name.in_(CRITICAL_FIELDS))
+
         if not show_reviewed:
             q = q.filter(UserChange.admin_reviewed.is_(False))
 
@@ -293,12 +292,9 @@ def get_pending_changes():
         per_page = request.args.get("per_page", 50, type=int)
 
         priority = case(
-            (
-                UserChange.field_name.in_(("phone_number", "vehicle_registration", "vehicle_registration_2")),
-                0
-            ),
-            else_=1
-        )
+    (UserChange.field_name.in_(CRITICAL_FIELDS), 0),
+    else_=1
+)
 
         q = UserChange.query.filter(UserChange.admin_reviewed.is_(False))
         total = q.count()
@@ -309,9 +305,9 @@ def get_pending_changes():
 
         # critical count
         critical_count = UserChange.query.filter(
-            UserChange.admin_reviewed.is_(False),
-            UserChange.field_name.in_(("cellphone_number", "vehicle_registration", "vehicle_registration_2")),
-        ).count()
+    UserChange.admin_reviewed.is_(False),
+    UserChange.field_name.in_(CRITICAL_FIELDS),
+).count()
 
         out = []
         for r in rows:
