@@ -40,15 +40,13 @@ def create_app() -> Flask:
     app.config["BOOTSTRAP_KEY"] = os.environ.get("BOOTSTRAP_KEY", "")
 
     # Database
+        # Database
     db_url = _normalize_database_url(os.environ.get("DATABASE_URL"))
     if db_url:
         app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     else:
-        # Local/dev fallback (file goes under src/database/)
-        db_dir = os.path.join(os.path.dirname(__file__), "database")
-        os.makedirs(db_dir, exist_ok=True)
-        app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(db_dir, 'app.db')}"
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+        # Local/dev fallback: use PostgreSQL instead of SQLite
+        app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:<#Johnvonl1977>@localhost:5432/altona_village_db"
 
     # Uploads
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
