@@ -65,5 +65,13 @@
     "python.defaultInterpreterPath": ".venv/Scripts/python.exe",
     "files.associations": {
         "*.db": "plaintext"
-    }
+    },
+    "python-envs.pythonProjects": [
+        {
+            "path": "",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
+    ],
+    "python.analysis.typeCheckingMode": "standard"
 }

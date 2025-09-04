@@ -33,7 +33,7 @@ def create_app() -> Flask:
         __name__,
         static_folder=os.path.join(os.path.dirname(__file__), "static"),
     )
-
+    CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
     # ---- Secrets & core config ---------------------------------------------
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "asdf#FGSgvasgf$5$WGT")
     app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "jwt-secret-string-change-in-production")
