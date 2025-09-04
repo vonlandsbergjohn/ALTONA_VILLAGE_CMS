@@ -13,14 +13,14 @@ from werkzeug.security import generate_password_hash
 
 # Create minimal Flask app for database context
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///altona_village_cms/src/database/app.db'
+app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Fix the database path
 import os
 base_dir = os.path.dirname(os.path.abspath(__file__))
 db_path = os.path.join(base_dir, 'altona_village_cms', 'src', 'database', 'app.db')
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
 
 # Initialize database
 db.init_app(app)

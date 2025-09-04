@@ -111,12 +111,17 @@ For production, consider upgrading to PostgreSQL:
    # In src/main.py, update the database URI
    import os
    
-   # Use PostgreSQL in production
-   if os.getenv('DATABASE_URL'):
-       app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-   else:
-       app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-   ```
+  # Use PostgreSQL in production and local development
+db_url = os.getenv('DATABASE_URL')
+
+if db_url:
+    # Normalize for SQLAlchemy compatibility
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+else:
+    # Local fallback: use local PostgreSQL
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db'
 
 ### 5. Domain Configuration (Optional)
 

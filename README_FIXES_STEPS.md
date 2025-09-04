@@ -27,15 +27,16 @@ This pack adds safe, deployment-ready files and ignores local secrets/artifacts.
 If your backend *does not* already handle Postgres on Render, open
 `altona_village_cms/src/main.py` in GitHub and make these safe additions:
 
-1) **Prefer Postgres if DATABASE_URL exists; else use local SQLite**
-   ```python
-   import os
-   DATABASE_URL = os.getenv("DATABASE_URL")
-   if DATABASE_URL and DATABASE_URL.startswith("postgres"):
-       app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-   else:
-       app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
-   ```
+import os
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL and DATABASE_URL.startswith("postgres"):
+    # Normalize for SQLAlchemy compatibility
+    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+else:
+    # Local fallback: use local PostgreSQL instead of SQLite
+    app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
 
 2) **CORS for your API**
    ```python

@@ -16,7 +16,7 @@ import traceback
 
 def debug_transition_status():
     app = Flask(__name__)
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///altona_village_cms/src/database/app.db'
+    app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     with app.app_context():
