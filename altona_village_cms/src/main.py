@@ -59,11 +59,8 @@ def create_app() -> Flask:
     app.config["BOOTSTRAP_KEY"] = os.environ.get("BOOTSTRAP_KEY", "")
 
     # ---- Database ----------------------------------------------------------
-    db_url = _normalize_database_url(os.environ.get("DATABASE_URL"))
-    if db_url:
-        app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-    else:
-        app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
+    print(f"DEBUG: Connected to DB: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
     # ---- Uploads -----------------------------------------------------------
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
