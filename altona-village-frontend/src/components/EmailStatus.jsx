@@ -11,7 +11,7 @@ const EmailStatus = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('https://altona-village-backend.onrender.com/api/admin/email-status', {
+    fetch('http://localhost:5000/api/admin/email-status', {
       headers: {
         Authorization: `Bearer ${getToken()}`
       }

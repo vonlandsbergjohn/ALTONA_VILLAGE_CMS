@@ -10,17 +10,13 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from flask import Flask, send_from_directory, jsonify
+from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from src.models.user import db  # import db only here
 
 
 def _normalize_database_url(url: Optional[str]) -> Optional[str]:
-    """
-    Render/Postgres sometimes provides DATABASE_URL starting with 'postgres://'.
-    SQLAlchemy prefers 'postgresql+psycopg2://' (or 'postgresql://').
-    """
     if not url:
         return url
     if url.startswith("postgres://"):
@@ -33,78 +29,80 @@ def create_app() -> Flask:
         __name__,
         static_folder=os.path.join(os.path.dirname(__file__), "static"),
     )
-    CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
-    # ---- Secrets & core config ---------------------------------------------
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "asdf#FGSgvasgf$5$WGT")
-    app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "jwt-secret-string-change-in-production")
-    app.config["BOOTSTRAP_KEY"] = os.environ.get("BOOTSTRAP_KEY", "")
 
-    # Database
-        # Database
-    db_url = _normalize_database_url(os.environ.get("DATABASE_URL"))
-    if db_url:
-        app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-    else:
-        # Local/dev fallback: use PostgreSQL instead of SQLite
-        app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
-
-    # Uploads
-    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
-    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
-    os.makedirs(upload_dir, exist_ok=True)
-    app.config["UPLOAD_FOLDER"] = upload_dir
-
-    # ---- Extensions ---------------------------------------------------------
-    cors_origins_raw = os.environ.get("CORS_ORIGINS", "*")
-    cors_origins = [o.strip() for o in cors_origins_raw.split(",")] if cors_origins_raw else ["*"]
+    # ---- CORS Setup ---------------------------------------------------------
     CORS(
         app,
-        resources={r"/api/*": {"origins": cors_origins}},
+        resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:3001"]}},
         supports_credentials=True,
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
-        expose_headers=["Content-Type", "Authorization"],
+        expose_headers=["Content-Type", "Authorization"]
     )
-    JWTManager(app)
-    db.init_app(app)
 
-    # --- Ensure the `user_changes` table exists (for admin notifications) ----
-    try:
-        # Import here to avoid circular imports during app setup
-        from src.models.user_change import ensure_user_changes_table
-        with app.app_context():
-            ensure_user_changes_table()
-    except Exception as e:
-        # Don't hard-crash the app if this helper fails; log it so we can debug
-        app.logger.exception("Failed to ensure user_changes table: %s", e)
+    # ---- Handle OPTIONS requests globally -----------------------------------
+    @app.before_request
+    def handle_options():
+        if request.method == "OPTIONS":
+            return ("", 204)
 
-    # ---- Logging (helpful in Render logs) -----------------------------------
-    logging.basicConfig(level=logging.INFO)
-    app.logger.info("App starting with DB: %s", app.config["SQLALCHEMY_DATABASE_URI"])
-
-    # ---- Health check -------------------------------------------------------
-    @app.get("/api/health")
-    def health():
-        return jsonify({"status": "ok"}), 200
-
-    # ---- Serve uploads (optional) ------------------------------------------
-    @app.get("/uploads/<path:filename>")
-    def uploaded_file(filename: str):
-        return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
-
-    # ---- Import & register blueprints AFTER app exists ----------------------
-    # (Keeps imports light at module import time and avoids circular refs)
-    try:
-        from src.routes.user import user_bp
-        app.register_blueprint(user_bp, url_prefix="/api")
-    except Exception as e:
-        app.logger.exception("Failed to register user_bp: %s", e)
-
+    # ---- Register auth blueprint --------------------------------------------
     try:
         from src.routes.auth import auth_bp
         app.register_blueprint(auth_bp, url_prefix="/api/auth")
     except Exception as e:
         app.logger.exception("Failed to register auth_bp: %s", e)
+
+    # ---- Secrets & core config ---------------------------------------------
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "asdf#FGSgvasgf$5$WGT")
+    app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "jwt-secret-string-change-in-production")
+    app.config["BOOTSTRAP_KEY"] = os.environ.get("BOOTSTRAP_KEY", "")
+
+    # ---- Database ----------------------------------------------------------
+    db_url = _normalize_database_url(os.environ.get("DATABASE_URL"))
+    if db_url:
+        app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
+
+    # ---- Uploads -----------------------------------------------------------
+    app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
+    upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    app.config["UPLOAD_FOLDER"] = upload_dir
+
+    # ---- Extensions --------------------------------------------------------
+    JWTManager(app)
+    db.init_app(app)
+
+    # --- Ensure the `user_changes` table exists -----------------------------
+    try:
+        from src.models.user_change import ensure_user_changes_table
+        with app.app_context():
+            ensure_user_changes_table()
+    except Exception as e:
+        app.logger.exception("Failed to ensure user_changes table: %s", e)
+
+    # ---- Logging -----------------------------------------------------------
+    logging.basicConfig(level=logging.INFO)
+    app.logger.info("App starting with DB: %s", app.config["SQLALCHEMY_DATABASE_URI"])
+
+    # ---- Health check ------------------------------------------------------
+    @app.get("/api/health")
+    def health():
+        return jsonify({"status": "ok"}), 200
+
+    # ---- Serve uploads -----------------------------------------------------
+    @app.get("/uploads/<path:filename>")
+    def uploaded_file(filename: str):
+        return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
+
+    # ---- Register blueprints -----------------------------------------------
+    try:
+        from src.routes.user import user_bp
+        app.register_blueprint(user_bp, url_prefix="/api")
+    except Exception as e:
+        app.logger.exception("Failed to register user_bp: %s", e)
 
     try:
         from src.routes.admin import admin_bp
@@ -131,18 +129,15 @@ def create_app() -> Flask:
         app.logger.exception("Failed to register gate_register_bp: %s", e)
 
     try:
-        # Note: this blueprint is named 'admin_notifications' (no _bp) in your project
         from src.routes.admin_notifications import admin_notifications
         app.register_blueprint(admin_notifications, url_prefix="/api")
     except Exception as e:
         app.logger.exception("Failed to register admin_notifications: %s", e)
 
-    # Optional admin bootstrap/repair route:
-    # Only enabled when BOOTSTRAP_KEY is set (prevents random usage).
     try:
         if app.config.get("BOOTSTRAP_KEY"):
             from src.routes.bootstrap_admin import bootstrap_bp
-            app.register_blueprint(bootstrap_bp)  # route file defines its own paths
+            app.register_blueprint(bootstrap_bp)
             app.logger.info("bootstrap_admin route ENABLED")
     except Exception as e:
         app.logger.exception("Failed to register bootstrap_admin bp: %s", e)
@@ -172,5 +167,4 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
-    # Local dev runner
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=True)

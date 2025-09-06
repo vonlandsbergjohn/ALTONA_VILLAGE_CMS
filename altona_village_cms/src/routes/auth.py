@@ -1,24 +1,25 @@
-# altona_village_cms/src/routes/auth.py
 from datetime import timedelta
 from flask import Blueprint, request, jsonify
-from flask_cors import cross_origin
+from flask_cors import CORS, cross_origin
 from flask_jwt_extended import (
     create_access_token,
     get_jwt_identity,
     verify_jwt_in_request,
 )
+
 from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
 
+auth_bp = Blueprint("auth", __name__)  # ✅ Define blueprint first
+CORS(auth_bp, origins=["http://localhost:3000", "http://localhost:3001"], supports_credentials=True)
+
 # Prefer importing the real logger + normalizer; fallback to safe no-ops
 try:
-    from src.routes.admin_notifications import log_user_change, normalize_field_name
+    from src.routes.admin.notifications import log_user_change, normalize_field_name
 except Exception:
-    def log_user_change(*args, **kwargs):
-        pass
+    def log_user_change(*args, **kwargs): pass
     def normalize_field_name(name: str) -> str:
         return name
-
 
 def parse_address(address: str):
     """Parse a free-form address into street number + name, with some cleanup."""
@@ -54,7 +55,7 @@ def parse_address(address: str):
     return street_number or "", street_name or address
 
 
-auth_bp = Blueprint("auth", __name__)
+auth_bp = Blueprint("auth_bp_unique", __name__)
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -180,8 +181,9 @@ def register():
 @cross_origin(
     supports_credentials=True,
     origins=[
-        "https://altona-village-frontend.onrender.com",
-        "http://localhost:5173",  # helpful for local dev; safe to keep
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://altona-village-frontend.onrender.com"
     ],
     allow_headers=["Authorization", "Content-Type"],
 )
@@ -236,9 +238,11 @@ def login():
 @cross_origin(
     supports_credentials=True,
     origins=[
-        "https://altona-village-frontend.onrender.com",
+        "http://localhost:3000",
         "http://localhost:5173",
+        "https://altona-village-frontend.onrender.com"
     ],
+    allow_headers=["Authorization", "Content-Type"],
 )
 def profile():
     if request.method == "OPTIONS":

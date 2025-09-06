@@ -45,8 +45,8 @@ const AdminTransitionLinking = () => {
       };
 
       const [transitionRes, registrationRes] = await Promise.all([
-        fetch('https://altona-village-backend.onrender.com/api/transition/admin/requests', { headers }),
-        fetch('https://altona-village-backend.onrender.com/api/admin/pending-registrations', { headers })
+        fetch('http://localhost:5000/api/transition/admin/requests', { headers }),
+        fetch('http://localhost:5000/api/admin/pending-registrations', { headers })
       ]);
 
       if (transitionRes.ok && registrationRes.ok) {
@@ -120,7 +120,7 @@ const AdminTransitionLinking = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://altona-village-backend.onrender.com/api/transition/admin/link-and-process', {
+      const response = await fetch('http://localhost:5000/api/transition/admin/link-and-process', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

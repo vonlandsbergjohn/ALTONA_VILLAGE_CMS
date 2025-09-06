@@ -24,7 +24,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import './App.css';
 
 // 🔵 backend base (absolute URL so it doesn't hit the SPA routes)
-const API = 'https://altona-village-backend.onrender.com';
+const API = 'http://localhost:5000';
 
 // Try a few common keys where the token might be stored
 function getStoredToken() {

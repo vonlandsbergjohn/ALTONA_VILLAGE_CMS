@@ -315,7 +315,7 @@ const UserTransitionRequest = () => {
       console.log('Submitting transition request with data:', submitData);
       console.log('current_role value:', submitData.current_role);
 
-      const response = await fetch('https://altona-village-backend.onrender.com/api/transition/request', {
+      const response = await fetch('http://localhost:5000/api/transition/request', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

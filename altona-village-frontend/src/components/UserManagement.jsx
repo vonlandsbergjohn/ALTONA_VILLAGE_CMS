@@ -51,7 +51,7 @@ const UserManagement = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/users/inactive', {
+      const response = await fetch('http://localhost:5000/api/admin/users/inactive', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -72,7 +72,7 @@ const UserManagement = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/users/archived', {
+      const response = await fetch('http://localhost:5000/api/admin/users/archived', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -186,7 +186,7 @@ const UserManagement = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://altona-village-backend.onrender.com/api/admin/users/archive-old', {
+      const response = await fetch('http://localhost:5000/api/admin/users/archive-old', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
