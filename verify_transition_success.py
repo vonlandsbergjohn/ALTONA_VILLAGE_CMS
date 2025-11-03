@@ -4,18 +4,18 @@ Verify Transition Completion Success
 Check the final state after successful transition linking
 """
 
-import sqlite3
+import psycopg2
+import os
+
+DATABASE_URL = os.getenv('DATABASE_URL', "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db")
 
 def verify_transition_success():
     """Verify that the transition was completed successfully"""
     
-    db_path = r"C:\Altona_Village_CMS\altona_village_cms\src\database\app.db"
-    
     print("✅ VERIFYING TRANSITION COMPLETION SUCCESS")
     print("=" * 60)
     
-    try:
-        conn = sqlite3.connect(db_path)
+    with psycopg2.connect(DATABASE_URL) as conn:
         cursor = conn.cursor()
         
         # 1. Check the transition request status
@@ -24,7 +24,7 @@ def verify_transition_success():
             SELECT id, erf_number, status, migration_completed, 
                    new_user_id, new_occupant_first_name, new_occupant_last_name
             FROM user_transition_requests 
-            WHERE erf_number = '27727'
+            WHERE erf_number = %s
             ORDER BY created_at DESC
             LIMIT 1
         """)
@@ -49,8 +49,8 @@ def verify_transition_success():
             cursor.execute("""
                 SELECT id, email, role, status, created_at
                 FROM users 
-                WHERE id = ?
-            """, (transition[4],))
+                WHERE id = %s
+            """, (str(transition[4]),))
             
             user = cursor.fetchone()
             if user:
@@ -74,8 +74,8 @@ def verify_transition_success():
             cursor.execute("""
                 SELECT first_name, last_name, erf_number, status
                 FROM residents 
-                WHERE user_id = ?
-            """, (transition[4],))
+                WHERE user_id = %s
+            """, (str(transition[4]),))
             
             resident = cursor.fetchone()
             if resident:
@@ -87,8 +87,8 @@ def verify_transition_success():
             cursor.execute("""
                 SELECT first_name, last_name, erf_number, status
                 FROM owners 
-                WHERE user_id = ?
-            """, (transition[4],))
+                WHERE user_id = %s
+            """, (str(transition[4]),))
             
             owner = cursor.fetchone()
             if owner:
@@ -103,9 +103,9 @@ def verify_transition_success():
                    r.first_name as r_first, r.last_name as r_last, r.status as r_status,
                    o.first_name as o_first, o.last_name as o_last, o.status as o_status
             FROM users u
-            LEFT JOIN residents r ON u.id = r.user_id AND r.erf_number = '27727'
-            LEFT JOIN owners o ON u.id = o.user_id AND o.erf_number = '27727'
-            WHERE u.status = 'active' AND u.role != 'admin'
+            LEFT JOIN residents r ON u.id = r.user_id AND r.erf_number = %s
+            LEFT JOIN owners o ON u.id = o.user_id AND o.erf_number = %s
+            WHERE u.status = 'active' AND u.role <> 'admin'
             AND (r.status = 'active' OR o.status = 'active')
         """)
         
@@ -127,8 +127,8 @@ def verify_transition_success():
             FROM vehicles v
             LEFT JOIN residents r ON v.resident_id = r.id
             LEFT JOIN owners o ON v.owner_id = o.id
-            WHERE r.erf_number = '27727' OR o.erf_number = '27727'
-        """)
+            WHERE r.erf_number = %s OR o.erf_number = %s
+        """, ('27727', '27727'))
         
         vehicles = cursor.fetchall()
         if vehicles:
@@ -139,14 +139,9 @@ def verify_transition_success():
         else:
             print("   No vehicles found for ERF 27727")
         
-        conn.close()
-        
-        print("\n" + "=" * 60)
-        print("🎉 VERIFICATION COMPLETE!")
-        print("The transition linking process has been successfully completed!")
-        
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    print("\n" + "=" * 60)
+    print("🎉 VERIFICATION COMPLETE!")
+    print("The transition linking process has been successfully completed!")
 
 if __name__ == "__main__":
     verify_transition_success()

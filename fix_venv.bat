@@ -41,10 +41,10 @@ python -m pip install --upgrade pip
 
 echo.
 echo Step 5: Installing required packages...
-pip install -r altona_village_cms\requirements.txt
+pip install -r requirements.txt
 if %errorlevel% neq 0 (
     echo ❌ Failed to install requirements
-    echo 💡 Check that altona_village_cms\requirements.txt exists
+    echo 💡 Check that requirements.txt exists in the altona_village_cms directory
     pause
     exit /b 1
 )

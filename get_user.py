@@ -1,23 +1,31 @@
-import sqlite3
+import psycopg2
 import os
 
-# Change to the correct directory
-os.chdir(r'c:\Altona_Village_CMS\altona_village_cms\src')
+DATABASE_URL = os.getenv('DATABASE_URL', "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db")
 
-# Connect to database
-conn = sqlite3.connect('database/app.db')
-cursor = conn.cursor()
+conn = None
+try:
+    # Connect to database
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor()
 
-# Check table structure first
-cursor.execute('PRAGMA table_info(users)')
-columns = cursor.fetchall()
-print("Users table columns:")
-for col in columns:
-    print(f"  {col[1]} ({col[2]})")
+    # Check table structure first
+    cursor.execute("""
+        SELECT column_name, data_type FROM information_schema.columns
+        WHERE table_name = 'users'
+    """)
+    columns = cursor.fetchall()
+    print("Users table columns:")
+    for col in columns:
+        print(f"  {col[0]} ({col[1]})")
 
-# Get a non-admin user
-cursor.execute('SELECT * FROM users WHERE role != "admin" LIMIT 1')
-user = cursor.fetchone()
-print(f"\nFirst user record: {user}")
+    # Get a non-admin user
+    cursor.execute("SELECT * FROM users WHERE role <> 'admin' LIMIT 1")
+    user = cursor.fetchone()
+    print(f"\nFirst user record: {user}")
 
-conn.close()
+except Exception as e:
+    print(f"An error occurred: {e}")
+finally:
+    if conn:
+        conn.close()

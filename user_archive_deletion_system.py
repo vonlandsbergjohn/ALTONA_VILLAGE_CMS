@@ -4,7 +4,7 @@ User Archive and Deletion System for Altona Village CMS
 Handles archiving and deletion of inactive users based on their roles and status
 """
 
-import sqlite3
+import psycopg2
 import os
 from datetime import datetime, timedelta
 import uuid
@@ -12,24 +12,21 @@ import json
 
 class UserArchiveDeletionSystem:
     def __init__(self, db_path=None):
-        if db_path is None:
-            self.db_path = os.path.join(os.path.dirname(__file__), 'altona_village_cms', 'src', 'database', 'app.db')
-        else:
-            self.db_path = db_path
+        self.db_url = os.getenv('DATABASE_URL', "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db")
     
     def _table_exists(self, cursor, table_name):
         """Check if a table exists in the database."""
         cursor.execute("""
-            SELECT name FROM sqlite_master 
-            WHERE type='table' AND name=?
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = %s
+            )
         """, (table_name,))
-        return cursor.fetchone() is not None
+        return cursor.fetchone()[0]
     
     def get_connection(self):
         """Get database connection"""
-        if not os.path.exists(self.db_path):
-            raise FileNotFoundError(f"Database not found at: {self.db_path}")
-        return sqlite3.connect(self.db_path)
+        return psycopg2.connect(self.db_url)
     
     def get_inactive_users_analysis(self):
         """Analyze inactive users and their data retention requirements"""
@@ -160,8 +157,8 @@ class UserArchiveDeletionSystem:
         cursor.execute("""
             SELECT id, registration_number, make, model, color, status
             FROM vehicles 
-            WHERE resident_id = ? OR owner_id = ?
-        """, (user_id, user_id))
+            WHERE resident_id = %s OR owner_id = %s
+        """, (str(user_id), str(user_id)))
         return cursor.fetchall()
     
     def _get_user_complaints(self, cursor, user_id):
@@ -169,8 +166,8 @@ class UserArchiveDeletionSystem:
         cursor.execute("""
             SELECT id, subject, status, created_at
             FROM complaints 
-            WHERE resident_id = ?
-        """, (user_id,))
+            WHERE resident_id = %s
+        """, (str(user_id),))
         return cursor.fetchall()
     
     def archive_user(self, user_id, archive_reason, performed_by_admin_id):
@@ -192,7 +189,7 @@ class UserArchiveDeletionSystem:
                 LEFT JOIN owners o ON u.id = o.user_id
                 LEFT JOIN user_transition_requests utr ON u.id = utr.user_id
                 WHERE u.id = ?
-            """, (user_id,))
+            """, (str(user_id),))
             
             user_data = cursor.fetchone()
             if not user_data:
@@ -226,8 +223,8 @@ class UserArchiveDeletionSystem:
                     archived_by = ?,
                     archive_reason = ?,
                     status = 'archived'
-                WHERE id = ?
-            """, (datetime.now().isoformat(), performed_by_admin_id, archive_reason, user_id))
+                WHERE id = %s
+            """, (datetime.now(), performed_by_admin_id, archive_reason, str(user_id)))
             
             conn.commit()
             print(f"   ✅ User {analysis['email']} archived successfully")
@@ -250,14 +247,14 @@ class UserArchiveDeletionSystem:
             LEFT JOIN residents r ON u.id = r.user_id
             LEFT JOIN owners o ON u.id = o.user_id
             WHERE u.id = ?
-        """, (user_id,))
+        """, (str(user_id),))
         
         user_data = cursor.fetchone()
         
         archive_record = {
             'archive_id': str(uuid.uuid4()),
             'user_id': user_id,
-            'archived_at': datetime.now().isoformat(),
+            'archived_at': datetime.now(),
             'archived_by': performed_by_admin_id,
             'archive_reason': archive_reason,
             'user_type': analysis['user_type'],
@@ -276,19 +273,19 @@ class UserArchiveDeletionSystem:
             CREATE TABLE IF NOT EXISTS user_archives (
                 id VARCHAR(36) PRIMARY KEY,
                 user_id VARCHAR(36),
-                archived_at DATETIME,
+                archived_at TIMESTAMP,
                 archived_by VARCHAR(36),
                 archive_reason TEXT,
                 user_type VARCHAR(50),
                 retention_policy VARCHAR(100),
                 archive_data TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
         cursor.execute("""
             INSERT INTO user_archives (id, user_id, archived_at, archived_by, archive_reason, user_type, retention_policy, archive_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             archive_record['archive_id'],
             user_id,
@@ -308,24 +305,24 @@ class UserArchiveDeletionSystem:
         print(f"   🗑️ Performing immediate deletion for {analysis['user_type']}")
         
         # Delete vehicles
-        cursor.execute("DELETE FROM vehicles WHERE resident_id = ? OR owner_id = ?", (user_id, user_id))
+        cursor.execute("DELETE FROM vehicles WHERE resident_id = %s OR owner_id = %s", (str(user_id), str(user_id)))
         vehicle_count = cursor.rowcount
         
         # Delete complaints and updates
-        cursor.execute("DELETE FROM complaint_updates WHERE complaint_id IN (SELECT id FROM complaints WHERE resident_id = ?)", (user_id,))
-        cursor.execute("DELETE FROM complaints WHERE resident_id = ?", (user_id,))
+        cursor.execute("DELETE FROM complaint_updates WHERE complaint_id IN (SELECT id FROM complaints WHERE resident_id = %s)", (str(user_id),))
+        cursor.execute("DELETE FROM complaints WHERE resident_id = %s", (str(user_id),))
         complaint_count = cursor.rowcount
         
         # Delete resident record
         if analysis['user_type'] in ['tenant_only', 'owner_resident']:
-            cursor.execute("DELETE FROM residents WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM residents WHERE user_id = %s", (str(user_id),))
             resident_deleted = cursor.rowcount > 0
         else:
             resident_deleted = False
         
         # Delete owner record (only if they sold the property)
         if analysis['user_type'] in ['owner_resident'] and analysis['new_occupant_type'] == 'terminated':
-            cursor.execute("DELETE FROM owners WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM owners WHERE user_id = %s", (str(user_id),))
             owner_deleted = cursor.rowcount > 0
         else:
             owner_deleted = False
@@ -342,7 +339,7 @@ class UserArchiveDeletionSystem:
         print(f"   📦 Performing limited retention archive for {analysis['user_type']}")
         
         # Delete vehicles (owners don't need vehicle access after selling)
-        cursor.execute("DELETE FROM vehicles WHERE resident_id = ? OR owner_id = ?", (user_id, user_id))
+        cursor.execute("DELETE FROM vehicles WHERE resident_id = %s OR owner_id = %s", (str(user_id), str(user_id)))
         vehicle_count = cursor.rowcount
         
         # Update owner record to remove personal details but keep property history
@@ -361,8 +358,8 @@ class UserArchiveDeletionSystem:
                 status = 'archived',
                 migration_date = ?,
                 migration_reason = 'Limited retention - property history only'
-            WHERE user_id = ?
-        """, (datetime.now().isoformat(), user_id))
+            WHERE user_id = %s
+        """, (datetime.now(), str(user_id)))
         
         print(f"      ✅ Deleted {vehicle_count} vehicles")
         print(f"      ✅ Archived owner record with limited data")
@@ -378,16 +375,16 @@ class UserArchiveDeletionSystem:
                 moving_out_date = ?,
                 migration_date = ?,
                 migration_reason = 'Moved out but retained ownership'
-            WHERE user_id = ?
-        """, (datetime.now().date().isoformat(), datetime.now().isoformat(), user_id))
+            WHERE user_id = %s
+        """, (datetime.now().date(), datetime.now(), str(user_id)))
         
         # Update vehicles to reflect non-resident status
         cursor.execute("""
             UPDATE vehicles SET 
                 status = 'owner_access_only',
                 updated_at = ?
-            WHERE resident_id = ? OR owner_id = ?
-        """, (datetime.now().isoformat(), user_id, user_id))
+            WHERE resident_id = %s OR owner_id = %s
+        """, (datetime.now(), str(user_id), str(user_id)))
         
         vehicle_count = cursor.rowcount
         
@@ -410,8 +407,8 @@ class UserArchiveDeletionSystem:
         
         if days_since_archive:
             cutoff_date = datetime.now() - timedelta(days=days_since_archive)
-            query = base_query + " WHERE ua.archived_at >= ?"
-            cursor.execute(query, (cutoff_date.isoformat(),))
+            query = base_query + " WHERE ua.archived_at >= %s"
+            cursor.execute(query, (cutoff_date,))
         else:
             cursor.execute(base_query)
         
@@ -431,8 +428,8 @@ class UserArchiveDeletionSystem:
         cursor.execute("""
             SELECT id, user_type, archived_at 
             FROM user_archives 
-            WHERE archived_at < ?
-        """, (cutoff_date.isoformat(),))
+            WHERE archived_at < %s
+        """, (cutoff_date,))
         
         old_archives = cursor.fetchall()
         
@@ -440,7 +437,7 @@ class UserArchiveDeletionSystem:
             print(f"🧹 Cleaning up {len(old_archives)} old archive records (older than {retention_days} days)")
             
             # Delete old archive records
-            cursor.execute("DELETE FROM user_archives WHERE archived_at < ?", (cutoff_date.isoformat(),))
+            cursor.execute("DELETE FROM user_archives WHERE archived_at < %s", (cutoff_date,))
             deleted_count = cursor.rowcount
             
             conn.commit()
@@ -621,7 +618,7 @@ class UserArchiveDeletionSystem:
         deletion_record = {
             'deletion_id': str(uuid.uuid4()),
             'user_id': user_id,
-            'deleted_at': datetime.now().isoformat(),
+            'deleted_at': datetime.now(),
             'deleted_by': performed_by_admin_id,
             'deletion_reason': deletion_reason,
             'deletion_type': 'permanent_admin_deletion',
@@ -642,18 +639,18 @@ class UserArchiveDeletionSystem:
             CREATE TABLE IF NOT EXISTS user_deletion_log (
                 id VARCHAR(36) PRIMARY KEY,
                 user_id VARCHAR(36),
-                deleted_at DATETIME,
+                deleted_at TIMESTAMP,
                 deleted_by VARCHAR(36),
                 deletion_reason TEXT,
                 deletion_type VARCHAR(100),
                 original_data TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         
         cursor.execute("""
             INSERT INTO user_deletion_log (id, user_id, deleted_at, deleted_by, deletion_reason, deletion_type, original_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """, (
             deletion_record['deletion_id'],
             user_id,
@@ -671,15 +668,15 @@ class UserArchiveDeletionSystem:
         counts = {}
         
         # Count vehicles
-        cursor.execute("SELECT COUNT(*) FROM vehicles WHERE resident_id = ? OR owner_id = ?", (user_id, user_id))
+        cursor.execute("SELECT COUNT(*) FROM vehicles WHERE resident_id = %s OR owner_id = %s", (str(user_id), str(user_id)))
         counts['vehicles'] = cursor.fetchone()[0]
         
         # Count complaints
-        cursor.execute("SELECT COUNT(*) FROM complaints WHERE resident_id = ?", (user_id,))
+        cursor.execute("SELECT COUNT(*) FROM complaints WHERE resident_id = %s", (str(user_id),))
         counts['complaints'] = cursor.fetchone()[0]
         
         # Count transition requests
-        cursor.execute("SELECT COUNT(*) FROM user_transition_requests WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT COUNT(*) FROM user_transition_requests WHERE user_id = %s", (str(user_id),))
         counts['transitions'] = cursor.fetchone()[0]
         
         return counts
@@ -695,8 +692,8 @@ class UserArchiveDeletionSystem:
             SELECT id, user_id, deleted_at, deleted_by, deletion_reason, deletion_type, original_data
             FROM user_deletion_log
             WHERE deleted_at >= ?
-            ORDER BY deleted_at DESC
-        """, (cutoff_date.isoformat(),))
+            ORDER BY deleted_at DESC;
+        """, (cutoff_date,))
         
         deletion_logs = cursor.fetchall()
         conn.close()
@@ -734,17 +731,17 @@ class UserArchiveDeletionSystem:
                 
             try:
                 if column == 'email':
-                    cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (user_email,))
+                    cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} = %s", (user_email,))
                 else:
                     # For user_id columns, we need to first get the user_id from email
-                    cursor.execute("SELECT id FROM users WHERE email = ?", (user_email,))
+                    cursor.execute("SELECT id FROM users WHERE email = %s", (user_email,))
                     user_result = cursor.fetchone()
                     if user_result:
                         user_id = user_result[0]
-                        cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (user_id,))
+                        cursor.execute(f"SELECT COUNT(*) FROM {table} WHERE {column} = %s", (str(user_id),))
                     else:
                         # User doesn't exist, so count will be 0
-                        cursor.execute(f"SELECT 0")
+                        cursor.execute("SELECT 0")
                 
                 count = cursor.fetchone()[0]
                 if count > 0:
@@ -753,7 +750,7 @@ class UserArchiveDeletionSystem:
                 else:
                     print(f"   ✅ No records in {table}.{column}")
                     
-            except sqlite3.OperationalError as e:
+            except psycopg2.Error as e:
                 print(f"   ⚠️ Could not check {table}.{column}: {e}")
         
         conn.close()

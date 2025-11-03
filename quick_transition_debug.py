@@ -6,22 +6,17 @@ Check the current state and identify why status updates are failing
 
 import sys
 import os
-import sqlite3
+import psycopg2
+
+DATABASE_URL = os.getenv('DATABASE_URL', "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db")
 
 def debug_transition_status():
     """Check the current transition status and identify issues"""
     
-    db_path = r"C:\Altona_Village_CMS\altona_village_cms\src\database\app.db"
-    
-    if not os.path.exists(db_path):
-        print(f"❌ Database not found at: {db_path}")
-        return
-    
     print("🔍 DEBUGGING TRANSITION STATUS ISSUES")
     print("=" * 60)
     
-    try:
-        conn = sqlite3.connect(db_path)
+    with psycopg2.connect(DATABASE_URL) as conn:
         cursor = conn.cursor()
         
         # 1. Check current transition requests
@@ -51,7 +46,7 @@ def debug_transition_status():
         cursor.execute("""
             SELECT id, email, role, status, created_at
             FROM users 
-            WHERE datetime(created_at) > datetime('now', '-1 hour')
+            WHERE created_at > NOW() - INTERVAL '1 hour'
             ORDER BY created_at DESC
         """)
         
@@ -99,7 +94,7 @@ def debug_transition_status():
         cursor.execute("""
             SELECT id, status, migration_completed, new_user_id, 
                    new_occupant_first_name, new_occupant_last_name,
-                   new_occupant_type
+                   new_occupant_type, created_at
             FROM user_transition_requests 
             WHERE erf_number = '27727'
             ORDER BY created_at DESC
@@ -112,15 +107,16 @@ def debug_transition_status():
             print(f"   Status: {erf_27727[1]}")
             print(f"   Migration Completed: {erf_27727[2]}")
             print(f"   New User ID: {erf_27727[3]}")
-            print(f"   New Occupant: {erf_27727[4]} {erf_27727[5]} ({erf_27727[6]})")
+            print(f"   New Occupant: {erf_27727[4]} {erf_27727[5]} ({erf_27727[6]})") # type: ignore
+            print(f"   Created At: {erf_27727[7]}")
             
             # If there's a new user, check their details
             if erf_27727[3]:
                 cursor.execute("""
                     SELECT email, role, status
                     FROM users 
-                    WHERE id = ?
-                """, (erf_27727[3],))
+                    WHERE id = %s
+                """, (str(erf_27727[3]),))
                 
                 user_details = cursor.fetchone()
                 if user_details:
@@ -130,13 +126,8 @@ def debug_transition_status():
         else:
             print("   No transition request found for ERF 27727")
         
-        conn.close()
-        
-        print("\n" + "=" * 60)
-        print("✅ Debug complete. Check the output above for issues.")
-        
-    except Exception as e:
-        print(f"❌ Error accessing database: {e}")
+    print("\n" + "=" * 60)
+    print("✅ Debug complete. Check the output above for issues.")
 
 if __name__ == "__main__":
     debug_transition_status()
