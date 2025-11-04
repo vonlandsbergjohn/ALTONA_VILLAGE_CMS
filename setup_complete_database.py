@@ -28,6 +28,68 @@ def setup_complete_database():
         # Create additional tables that might be needed
         tables_to_create = []
         
+        # Users table (MUST be created first)
+        if 'users' not in existing_tables:
+            tables_to_create.append('users')
+            cursor.execute("""
+                CREATE TABLE users (
+                    id VARCHAR(36) PRIMARY KEY,
+                    email VARCHAR(255) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    role VARCHAR(50) NOT NULL DEFAULT 'pending',
+                    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    archived BOOLEAN DEFAULT FALSE,
+                    archived_at TIMESTAMP,
+                    archived_by VARCHAR(36)
+                )
+            """)
+
+        # Residents table
+        if 'residents' not in existing_tables:
+            tables_to_create.append('residents')
+            cursor.execute("""
+                CREATE TABLE residents (
+                    id VARCHAR(36) PRIMARY KEY,
+                    user_id VARCHAR(36) NOT NULL UNIQUE,
+                    first_name VARCHAR(100) NOT NULL,
+                    last_name VARCHAR(100) NOT NULL,
+                    phone_number VARCHAR(20),
+                    emergency_contact_name VARCHAR(200),
+                    emergency_contact_number VARCHAR(20),
+                    id_number VARCHAR(20) NOT NULL,
+                    erf_number VARCHAR(20) NOT NULL,
+                    street_number VARCHAR(10),
+                    street_name VARCHAR(200),
+                    full_address TEXT,
+                    intercom_code VARCHAR(10),
+                    moving_in_date DATE,
+                    moving_out_date DATE,
+                    status VARCHAR(20) DEFAULT 'active',
+                    migration_date TIMESTAMP,
+                    migration_reason TEXT,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            """)
+
+        # Owners table
+        if 'owners' not in existing_tables:
+            tables_to_create.append('owners')
+            cursor.execute("""
+                CREATE TABLE owners (
+                    id VARCHAR(36) PRIMARY KEY,
+                    user_id VARCHAR(36) NOT NULL UNIQUE,
+                    first_name VARCHAR(100) NOT NULL,
+                    last_name VARCHAR(100) NOT NULL,
+                    erf_number VARCHAR(50) NOT NULL,
+                    status VARCHAR(50) NOT NULL DEFAULT 'active',
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            """)
+
         # Vehicles table
         if 'vehicles' not in existing_tables:
             tables_to_create.append('vehicles')
