@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.engine import Engine
 
-from src.models.user import db
+from .user import db
 
 
 class UserChange(db.Model):

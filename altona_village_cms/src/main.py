@@ -58,8 +58,14 @@ def create_app() -> Flask:
     app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "jwt-secret-string-change-in-production")
     app.config["BOOTSTRAP_KEY"] = os.environ.get("BOOTSTRAP_KEY", "")
 
-    # ---- Database ----------------------------------------------------------
-    app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
+    # ---- Database Configuration -------------------------------------------
+    # Load from environment variable, with a fallback for local development.
+    # IMPORTANT: The hardcoded fallback should not contain production credentials.
+    db_url = os.getenv('DATABASE_URL', "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db")
+    # Normalize for SQLAlchemy compatibility (e.g., for Render/Heroku)
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     print(f"DEBUG: Connected to DB: {app.config['SQLALCHEMY_DATABASE_URI']}")
 
     # ---- Uploads -----------------------------------------------------------

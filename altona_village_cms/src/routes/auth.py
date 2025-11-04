@@ -10,9 +10,6 @@ from flask_jwt_extended import (
 from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
 
-# auth_bp = Blueprint("auth", __name__)  # This line is redundant and should be removed
-CORS(auth_bp, origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"], supports_credentials=True)
-
 # Prefer importing the real logger + normalizer; fallback to safe no-ops
 try:
     from src.routes.admin.notifications import log_user_change, normalize_field_name
@@ -55,7 +52,10 @@ def parse_address(address: str):
     return street_number or "", street_name or address
 
 
-auth_bp = Blueprint("auth", __name__) # Ensure the blueprint is defined once and correctly named
+# 1. Define the blueprint once
+auth_bp = Blueprint("auth", __name__)
+# 2. Apply CORS to the defined blueprint
+CORS(auth_bp, origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"], supports_credentials=True)
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -207,14 +207,14 @@ def login():
         potential_users = User.query.filter_by(email=email).all()
 
         authenticated_user = None
-        # Iterate through potential users, prioritizing an admin user if found
-        for u in potential_users:
-            if u.check_password(password):
-                if u.role == 'admin':
-                    authenticated_user = u
-                    break # Found the admin, use this one immediately
-                elif not authenticated_user: # If no admin found yet, take the first matching non-admin
-                    authenticated_user = u
+        # Prioritize admin user: find an admin with the correct password first.
+        admin_user = next((u for u in potential_users if u.role == 'admin' and u.check_password(password)), None)
+
+        if admin_user:
+            authenticated_user = admin_user
+        else:
+            # If no admin matches, find the first non-admin user that matches.
+            authenticated_user = next((u for u in potential_users if u.role != 'admin' and u.check_password(password)), None)
         
         if not authenticated_user:
             return jsonify({"error": "Invalid email or password"}), 401
