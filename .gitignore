@@ -1,32 +1,24 @@
-# Python
-.venv/
-venv/
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
-*.egg-info/
-.pytest_cache/
-.mypy_cache/
-.coverage*
+*$py.class
 
-# Databases & uploads (keep your existing lines)
-altona_village_cms/src/database/*.db
-uploads/
+# C extensions
+*.so
 
-# Frontend/Vite/Node
-node_modules/
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
 dist/
-altona-village-frontend/node_modules/
-altona-village-frontend/dist/
+downloads/
+eggs/
+.eggs/
 
-# Local env & machine files
-.env
-.env.*
-!.env.example        # keep template if you have one
-*.run.xml            # VS Code/IDE run configs
+# Virtual Environments
+.venv/
+venv/
 
-# Editor/OS junk
+# VS Code / Code OSS
 .vscode/
-.idea/
-.DS_Store
-Thumbs.db
-*.log
+.codeoss/
