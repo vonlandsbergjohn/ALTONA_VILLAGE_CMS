@@ -10,8 +10,8 @@ from flask_jwt_extended import (
 from src.models.user import User, Resident, Owner, db
 from src.utils.email_service import send_registration_notification_to_admin
 
-auth_bp = Blueprint("auth", __name__)  # ✅ Define blueprint first
-CORS(auth_bp, origins=["http://localhost:3000", "http://localhost:3001"], supports_credentials=True)
+# auth_bp = Blueprint("auth", __name__)  # This line is redundant and should be removed
+CORS(auth_bp, origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"], supports_credentials=True)
 
 # Prefer importing the real logger + normalizer; fallback to safe no-ops
 try:
@@ -55,7 +55,7 @@ def parse_address(address: str):
     return street_number or "", street_name or address
 
 
-auth_bp = Blueprint("auth_bp_unique", __name__)
+auth_bp = Blueprint("auth", __name__) # Ensure the blueprint is defined once and correctly named
 
 
 @auth_bp.route("/register", methods=["POST"])
@@ -203,9 +203,23 @@ def login():
         if not email or not password:
             return jsonify({"error": "Email and password are required"}), 400
 
-        user = User.query.filter_by(email=email).first()
-        if not user or not user.check_password(password):
+        # Retrieve all users with the given email, as email is not unique
+        potential_users = User.query.filter_by(email=email).all()
+
+        authenticated_user = None
+        # Iterate through potential users, prioritizing an admin user if found
+        for u in potential_users:
+            if u.check_password(password):
+                if u.role == 'admin':
+                    authenticated_user = u
+                    break # Found the admin, use this one immediately
+                elif not authenticated_user: # If no admin found yet, take the first matching non-admin
+                    authenticated_user = u
+        
+        if not authenticated_user:
             return jsonify({"error": "Invalid email or password"}), 401
+
+        user = authenticated_user # Use the found and authenticated user
 
         # Admin bypass + auto-activate safeguard
         if user.role == "admin":
@@ -239,6 +253,7 @@ def login():
     supports_credentials=True,
     origins=[
         "http://localhost:3000",
+        "http://localhost:3001",
         "http://localhost:5173",
         "https://altona-village-frontend.onrender.com"
     ],

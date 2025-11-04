@@ -72,6 +72,12 @@ def create_app() -> Flask:
     JWTManager(app)
     db.init_app(app)
 
+    # --- Create all database tables if they don't exist ---------------------
+    with app.app_context():
+        # This will create tables from all models imported in the project
+        # (e.g., User, Property, Vehicle)
+        db.create_all()
+
     # --- Ensure the `user_changes` table exists -----------------------------
     try:
         from src.models.user_change import ensure_user_changes_table
