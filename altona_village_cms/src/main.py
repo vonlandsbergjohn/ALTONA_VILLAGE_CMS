@@ -13,8 +13,10 @@ if project_root not in sys.path:
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from dotenv import load_dotenv
 
+# Determine the correct project root for the .env file
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv(os.path.join(project_root, '.env'))
 from src.models.user import db  # import db only here
