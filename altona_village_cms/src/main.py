@@ -16,14 +16,6 @@ from flask_jwt_extended import JWTManager
 from src.models.user import db  # import db only here
 
 
-def _normalize_database_url(url: Optional[str]) -> Optional[str]:
-    if not url:
-        return url
-    if url.startswith("postgres://"):
-        return url.replace("postgres://", "postgresql+psycopg2://", 1)
-    return url
-
-
 def create_app() -> Flask:
     app = Flask(
         __name__,
@@ -60,9 +52,14 @@ def create_app() -> Flask:
 
     # ---- Database Configuration -------------------------------------------
     # Load from environment variable, with a fallback for local development.
-    # IMPORTANT: The hardcoded fallback should not contain production credentials.
-    db_url = os.getenv('DATABASE_URL', "postgresql://postgres:%23Johnvonl1977@localhost:5432/altona_village_db")
-    # Normalize for SQLAlchemy compatibility (e.g., for Render/Heroku)
+    # The fallback is for convenience in a trusted local dev environment.
+    # In production, DATABASE_URL *must* be set.
+    db_url = os.getenv('DATABASE_URL')
+    if not db_url:
+        # Fallback for local development if DATABASE_URL is not set
+        db_url = "postgresql+psycopg2://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
+
+    # Heroku/Render use `postgres://`, but SQLAlchemy needs `postgresql://`
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
