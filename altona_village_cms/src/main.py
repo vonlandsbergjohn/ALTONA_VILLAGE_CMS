@@ -13,6 +13,10 @@ if project_root not in sys.path:
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(project_root, '.env'))
 from src.models.user import db  # import db only here
 
 
@@ -55,11 +59,12 @@ def create_app() -> Flask:
     # The fallback is for convenience in a trusted local dev environment.
     # In production, DATABASE_URL *must* be set.
     db_url = os.getenv('DATABASE_URL')
-    if not db_url:
-        # Fallback for local development if DATABASE_URL is not set
-        db_url = "postgresql+psycopg2://postgres:%23Johnvonl1977@localhost:5432/altona_village_db"
 
     # Heroku/Render use `postgres://`, but SQLAlchemy needs `postgresql://`
+    if not db_url:
+        app.logger.error("DATABASE_URL environment variable not set.")
+        raise ValueError("DATABASE_URL is not set. Please check your .env file or environment variables.")
+
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
