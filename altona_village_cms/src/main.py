@@ -32,7 +32,15 @@ def create_app() -> Flask:
     # ---- CORS Setup ---------------------------------------------------------
     CORS(
         app,
-        resources={r"/api/*": {"origins": ["http://localhost:3000", "http://localhost:3001"]}},
+        resources={
+            r"/api/*": {
+                "origins": [
+                    "http://localhost:3000",
+                    "http://localhost:3001",
+                    r"https://.*\.cs-europe-west1-iuzs\.cloudshell\.dev",
+                ]
+            }
+        },
         supports_credentials=True,
         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization"],
