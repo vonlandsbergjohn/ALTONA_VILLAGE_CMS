@@ -127,6 +127,7 @@ def create_app() -> Flask:
         new_password = "dGdFHLCJxx44ykq"  # A secure, known password for dev
 
         try:
+            from src.models.user import User  # Import the User model here
             # Find all users with this email, regardless of role
             all_users = db.session.query(User).filter_by(email=admin_email).all()
             admin_user = next((u for u in all_users if u.role == 'admin'), None)
