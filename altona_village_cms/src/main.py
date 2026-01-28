@@ -13,6 +13,7 @@ if project_root not in sys.path:
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from werkzeug.security import generate_password_hash
 
 # Determine the correct project root for the .env file
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -104,6 +105,65 @@ def create_app() -> Flask:
     @app.get("/api/health")
     def health():
         return jsonify({"status": "ok"}), 200
+
+    # ---- CLI command to initialize the database ----------------------------
+    @app.cli.command("init-db")
+    def init_db_command():
+        """Creates the database tables."""
+        try:
+            db.create_all()
+            from src.models.user_change import ensure_user_changes_table
+            ensure_user_changes_table()
+            print("Initialized the database and all tables.")
+        except Exception as e:
+            print(f"Error initializing database: {e}")
+            # Optionally re-raise or handle more gracefully
+            # raise e
+
+    @app.cli.command("set-admin-password")
+    def set_admin_password_command():
+        """Finds or creates an admin user and sets a known password."""
+        admin_email = "vonlandsbergjohn@gmail.com"
+        new_password = "dGdFHLCJxx44ykq"  # A secure, known password for dev
+
+        try:
+            # Find all users with this email, regardless of role
+            all_users = db.session.query(User).filter_by(email=admin_email).all()
+            admin_user = next((u for u in all_users if u.role == 'admin'), None)
+
+            if not admin_user:
+                # If no admin user exists, create one
+                print(f"Admin user '{admin_email}' not found. Creating a new one.")
+                admin_user = User(email=admin_email, role='admin', status='active')
+                db.session.add(admin_user)
+
+            # 1. Set the admin user's password and ensure they are active
+            admin_user.set_password(new_password)
+            admin_user.status = 'active'
+            print(f"✅ Admin user '{admin_user.email}' is being configured.")
+
+            # 2. Disable any other conflicting non-admin users with the same email
+            disabled_count = 0
+            for user in all_users:
+                if user.id != admin_user.id and user.role != 'admin':
+                    user.status = 'inactive'  # Mark as inactive
+                    # Set a long, random, unusable password
+                    user.password_hash = generate_password_hash("disabled-user-placeholder-password")
+                    print(f"   - Disabling conflicting non-admin account (ID: {user.id})")
+                    disabled_count += 1
+
+            db.session.commit()
+            print("\n✅ Success! Admin credentials have been set.")
+            print(f"   - Email:    {admin_email}")
+            print(f"   - Password: {new_password}")
+            if disabled_count > 0:
+                print(f"   - Disabled {disabled_count} conflicting account(s).")
+
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ An error occurred while setting admin password: {e}")
+
+    # The app context is now needed for the init-db command to work
 
     # ---- Serve uploads -----------------------------------------------------
     @app.get("/uploads/<path:filename>")
